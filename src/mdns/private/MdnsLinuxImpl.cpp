@@ -16,6 +16,10 @@ namespace {
 constexpr unsigned char localhost[]        = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
 constexpr unsigned char localhost_mapped[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
 
+bool isLoopback(struct sockaddr_in *sockaddr) {
+    return (ntohl(sockaddr->sin_addr.s_addr) & 0xFF000000) == 0x7F000000;
+}
+
 template <typename T>
 std::string inet2str(char* buffer, std::size_t capacity, T const* addr, std::size_t addrlen) {
     static_assert(
@@ -75,7 +79,7 @@ int initalizeIpv4Socket(ifaddrs *ifa, sockaddr_in *sockaddr, int port) {
 
     auto sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (sock < 0) {
-        log::mdns()->error("Error creating socket: " + getErrnoString());
+        logger::mdns()->error("Error creating socket: " + getErrnoString());
         return -1;
     }
 
@@ -84,27 +88,27 @@ int initalizeIpv4Socket(ifaddrs *ifa, sockaddr_in *sockaddr, int port) {
     unsigned int  reuseaddr = 1;
 
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(reuseaddr)) < 0) {
-        log::mdns()->error("Error setting SO_REUSEADDR socket option: " + getErrnoString());
+        logger::mdns()->error("Error setting SO_REUSEADDR socket option: " + getErrnoString());
         ::close(sock);
         return -1;
     }
 
 #ifdef SO_REUSEPORT
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuseaddr, sizeof(reuseaddr)) < 0) {
-        log::mdns()->error("Error setting SO_REUSEPORT socket option: " + getErrnoString());
+        logger::mdns()->error("Error setting SO_REUSEPORT socket option: " + getErrnoString());
         ::close(sock);
         return -1;
     }
 #endif
 
     if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) < 0) {
-        log::mdns()->error("Error setting IP_MULTICAST_TTL socket option: " + getErrnoString());
+        logger::mdns()->error("Error setting IP_MULTICAST_TTL socket option: " + getErrnoString());
         ::close(sock);
         return -1;
     }
 
     if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, &loopback, sizeof(loopback)) < 0) {
-        log::mdns()->error("Error setting IP_MULTICAST_LOOP socket option: " + getErrnoString());
+        logger::mdns()->error("Error setting IP_MULTICAST_LOOP socket option: " + getErrnoString());
         ::close(sock);
         return -1;
     }
@@ -114,13 +118,13 @@ int initalizeIpv4Socket(ifaddrs *ifa, sockaddr_in *sockaddr, int port) {
     req.imr_interface        = sockaddr->sin_addr;
 
     if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req))) {
-        log::mdns()->error("Error setting IP_ADD_MEMBERSHIP socket options");
+        logger::mdns()->error("Error setting IP_ADD_MEMBERSHIP socket options");
         ::close(sock);
         return -1;
     }
 
     if (bind(sock, reinterpret_cast<::sockaddr *>(sockaddr), sizeof(sockaddr_in))) {
-        log::mdns()->error("Error binding socket");
+        logger::mdns()->error("Error binding socket");
         ::close(sock);
         return -1;
     }
@@ -128,7 +132,7 @@ int initalizeIpv4Socket(ifaddrs *ifa, sockaddr_in *sockaddr, int port) {
     auto const flags = fcntl(sock, F_GETFL, 0);
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 
-    log::mdns()->trace("Socket successfully created");
+    logger::mdns()->trace("Socket successfully created");
     return sock;
 }
 
@@ -148,7 +152,7 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
     char conv[128];
 
     if (getifaddrs(&ifaddr) < 0) {
-        log::mdns()->error("Error getting if list");
+        logger::mdns()->error("Error getting if list");
         return result;
     }
 
@@ -158,24 +162,24 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
         }
 
         if (result.size() >= max) {
-            log::mdns()->warn("Reached max sockets count. Unable to create socket");
+            logger::mdns()->warn("Reached max sockets count. Unable to create socket");
             break;
         }
 
         if (curr_if->ifa_addr->sa_family == AF_INET) {
             auto *sockaddr = reinterpret_cast<sockaddr_in *>(curr_if->ifa_addr);
 
-            if (IN_LOOPBACK(sockaddr->sin_addr.s_addr)) {
+            if (isLoopback(sockaddr)) {
                 continue;
             }
 
             auto const sock = initalizeIpv4Socket(curr_if, sockaddr, port);
             if (sock < 0) {
-                log::mdns()->warn("Skipping IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+                logger::mdns()->warn("Skipping IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
                 continue;
             }
 
-            log::mdns()->trace("Init IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+            logger::mdns()->trace("Init IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
             result.push_back(sock);
         }
 
@@ -188,11 +192,11 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
 
             auto const sock = initalizeIpv6Socket(curr_if, sockaddr, port);
             if (sock < 0) {
-                log::mdns()->warn("Skipping IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+                logger::mdns()->warn("Skipping IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
                 continue;
             }
 
-            log::mdns()->trace("Init IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+            logger::mdns()->trace("Init IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
         }
     }
 
@@ -209,7 +213,7 @@ mdns::MdnsHelper::BackendImpl::send_multicast(sock_fd_t sock, void const* buffer
 
     socklen_t saddrlen = sizeof(struct sockaddr_storage);
     if (getsockname(sock, saddr, &saddrlen)) {
-        log::mdns()->error("getsockname() failed: " + getErrnoString());
+        logger::mdns()->error("getsockname() failed: " + getErrnoString());
         return -1;
     }
 
@@ -244,7 +248,7 @@ mdns::MdnsHelper::BackendImpl::send_multicast(sock_fd_t sock, void const* buffer
     }
 
     if (sendto(sock, buffer, static_cast<int>(size), 0, saddr, saddrlen) < 0) {
-        log::mdns()->error("sendto() failed: " + getErrnoString());
+        logger::mdns()->error("sendto() failed: " + getErrnoString());
         return -1;
     }
 
@@ -321,11 +325,11 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
                 break;
 
             if (ret == 0) {
-                log::mdns()->warn("Zero-length UDP datagram ignored");
+                logger::mdns()->warn("Zero-length UDP datagram ignored");
                 break;
             }
 
-            log::mdns()->error("recvfrom() failed: " + getErrnoString());
+            logger::mdns()->error("recvfrom() failed: " + getErrnoString());
             break;
         }
     }

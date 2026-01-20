@@ -1,11 +1,12 @@
 #include "MdnsHelper.h"
 #include "../include/Proto.h"
 #include "Logger.h"
+#include "MdnsImpl.hpp"
 
 #if defined(_WIN32)
-    #pragma error "TOOD: Add support"
+    #include <winsock.h>
 #else
-    #include "MdnsImpl.hpp"
+    #include <arpa/inet.h>
 #endif
 
 mdns::MdnsHelper::MdnsHelper()
@@ -20,12 +21,12 @@ mdns::MdnsHelper::runDiscovery()
 {
     auto const connections = impl_->open_client_sockets_foreach_iface(32, 0);
     if (connections.empty()) {
-        log::mdns()->error("No sockets opened");
+        logger::mdns()->error("No sockets opened");
         return std::nullopt;
     }
 
-    log::mdns()->info("Opened " + std::to_string(connections.size()) + " sockets");
-    log::mdns()->info("Sending DNS-SD discovery");
+    logger::mdns()->info("Opened " + std::to_string(connections.size()) + " sockets");
+    logger::mdns()->info("Sending DNS-SD discovery");
 
     for (auto const socket: connections) {
         // TODO: Remove from list?
@@ -36,7 +37,7 @@ mdns::MdnsHelper::runDiscovery()
 
     auto const messages = impl_->receive_discovery(connections);
     for (auto const& message: messages) {
-        log::mdns()->trace("Processing multicast (" + std::to_string(message.blob.size()) + " bytes)");
+        logger::mdns()->trace("Processing multicast (" + std::to_string(message.blob.size()) + " bytes)");
 
         auto const parsed = parseDiscoveryResponse(message);
         if (parsed.has_value()) {
@@ -44,7 +45,7 @@ mdns::MdnsHelper::runDiscovery()
         }
     }
 
-    log::mdns()->info("Closing sockets");
+    logger::mdns()->info("Closing sockets");
     for (auto const socket: connections) {
         impl_->close(socket);
     }
@@ -80,11 +81,11 @@ mdns::MdnsHelper::serializeRR(proto::mdns_response& res, proto::mdns_rr& rr) {
         target = "Unknown";
     }
 
-    log::mdns()->trace(fmt::format("PoinTeR: {} -> {}", rr.name, target));
+    logger::mdns()->trace(fmt::format("PoinTeR: {} -> {}", rr.name, target));
     rr.rdata_serialized = target;
 
     return true;
-};
+}
 
 const std::uint8_t*
 mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start, const std::uint8_t* end, std::string& out) {
@@ -103,13 +104,13 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
         {
             if (cur + 1 >= end)
             {
-                log::mdns()->error("Malformed packet (truncated compression)");
+                logger::mdns()->error("Malformed packet (truncated compression)");
                 return nullptr;
             }
 
             std::uint16_t offset = ((len & 0x3F) << 8) | *(cur + 1);
             if (start + offset >= end) {
-                log::mdns()->error("Malformed packet (bad compression offset)");
+                logger::mdns()->error("Malformed packet (bad compression offset)");
                 return nullptr;
             }
 
@@ -121,7 +122,7 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
             terminated = true;
 
             if (++jumpCount > 10) {
-                log::mdns()->error("Compression pointer loop detected");
+                logger::mdns()->error("Compression pointer loop detected");
                 return nullptr;
             }
 
@@ -137,7 +138,7 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
         cur++;
 
         if (cur + len > end) {
-            log::mdns()->error("Malformed packet (label overruns buffer)");
+            logger::mdns()->error("Malformed packet (label overruns buffer)");
             return nullptr;
         }
 
@@ -147,7 +148,7 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
     }
 
     if (!terminated && !ret) {
-        log::mdns()->error("Malformed packet (name not terminated)");
+        logger::mdns()->error("Malformed packet (name not terminated)");
         return nullptr;
     }
 
@@ -195,7 +196,7 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
 
     // TODO: OFFSETOFF
     if (buffer.size() < 12) {
-        log::mdns()->warn("mDNS packet too small: " + std::to_string(buffer.size()) + " bytes");
+        logger::mdns()->warn("mDNS packet too small: " + std::to_string(buffer.size()) + " bytes");
         return std::nullopt;
     }
 
@@ -213,7 +214,7 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     std::uint16_t const authority_rrs  = readU16(data);
     std::uint16_t const additional_rrs = readU16(data);
 
-    log::mdns()->trace(fmt::format(
+    logger::mdns()->trace(fmt::format(
         "Header: id={} flags=0x{:04X} qd={} an={} ns={} ar={}",
             response.query_id,
             response.flags,
@@ -224,7 +225,7 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     ));
 
     if (response.query_id != 0 || response.flags != 0x8400) {
-        log::mdns()->warn(
+        logger::mdns()->warn(
             "Skipping mDNS response: query_id=" +
                 std::to_string(response.query_id) +
             " flags=0x" +

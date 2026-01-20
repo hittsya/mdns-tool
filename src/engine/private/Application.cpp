@@ -13,11 +13,11 @@
 mdns::engine::Application::Application(int width, int height, const char* title)
     : m_width(width), m_height(height), m_title(title)
 {
-    log::init();
-    log::core()->info("Logger initialized");
+    logger::init();
+    logger::core()->info("Logger initialized");
 
     if (!glfwInit()) {
-        log::core()->error("Failed to initialize GLFW");
+        logger::core()->error("Failed to initialize GLFW");
         throw std::runtime_error("Failed to initialize GLFW");
     }
 
@@ -34,14 +34,14 @@ mdns::engine::Application::Application(int width, int height, const char* title)
 
     m_window = glfwCreateWindow(m_width, m_height, m_title, nullptr, nullptr);
     if (!m_window) {
-        log::core()->error("Failed to create window");
+        logger::core()->error("Failed to create window");
         throw std::runtime_error("Failed to create window");
     }
 
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1);
 
-    log::core()->info("GLFW initialized");
+    logger::core()->info("GLFW initialized");
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -50,7 +50,7 @@ mdns::engine::Application::Application(int width, int height, const char* title)
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    log::core()->info("ImGUI initialized");
+    logger::core()->info("ImGUI initialized");
 }
 
 mdns::engine::Application::~Application()
@@ -59,15 +59,15 @@ mdns::engine::Application::~Application()
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
 
-    log::core()->info("ImGUI terminated");
+    logger::core()->info("ImGUI terminated");
 
     glfwDestroyWindow(m_window);
     glfwTerminate();
 
-    log::core()->info("GLFW terminated");
-    log::core()->info("Shutting down logger");
+    logger::core()->info("GLFW terminated");
+    logger::core()->info("Shutting down logger");
 
-    log::shutdown();
+    logger::shutdown();
 }
 
 void

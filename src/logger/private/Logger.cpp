@@ -4,7 +4,7 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-namespace log {
+namespace logger {
 
     namespace {
         std::shared_ptr<spdlog::logger> core_logger;

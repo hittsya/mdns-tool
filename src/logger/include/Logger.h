@@ -3,7 +3,7 @@
 #include <memory>
 #include <spdlog/logger.h>
 
-namespace log {
+namespace logger {
     void init();
     void shutdown();
 
