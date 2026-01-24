@@ -22,7 +22,7 @@ public:
         }
     };
 
-    Application(int width, int height, const char* title);
+    Application(int width, int height, std::string buildInfo);
     ~Application();
     void run();
 private:
@@ -38,7 +38,7 @@ private:
 private:
     int                               m_width;
     int                               m_height;
-    const char*                       m_title;
+    std::string                       m_title;
     GLFWwindow*                       m_window = nullptr;
 	float                             m_ui_scaling_factor = 1.0f;
     MdnsHelper                        m_mdns_helper;

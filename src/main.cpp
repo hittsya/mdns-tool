@@ -2,11 +2,12 @@
 
 int main(int argc, char **argv)
 {
-    // mdns::MdnsHelper helper;
-    // helper.runDiscovery();
+	auto buildInfo = "1.0.0 (" + std::string(GIT_COMMIT_SHORT) + ")";
+    if (GIT_DIRTY) {
+        buildInfo += " [dirty]";
+    }
 
-    mdns::engine::Application app(1280, 720, "Test");
+    mdns::engine::Application app(1280, 720, buildInfo);
     app.run();
-
     return 0;
 }

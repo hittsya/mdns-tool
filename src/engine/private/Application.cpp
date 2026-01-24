@@ -14,11 +14,13 @@
     #define GL_SILENCE_DEPRECATION
 #endif
 
-mdns::engine::Application::Application(int width, int height, const char* title)
-    : m_width(width), m_height(height), m_title(title)
+mdns::engine::Application::Application(int width, int height, std::string buildInfo)
+    : m_width(width), m_height(height)
 {
     logger::init();
     logger::core()->info("Logger initialized");
+    logger::core()->info("Build " + buildInfo);
+
 
     if (!glfwInit()) {
         logger::core()->error("Failed to initialize GLFW");
@@ -40,7 +42,8 @@ mdns::engine::Application::Application(int width, int height, const char* title)
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
 
-    m_window = glfwCreateWindow(m_width, m_height, m_title, nullptr, nullptr);
+	m_title  = "mDNS Browser - " + buildInfo;
+    m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
         throw std::runtime_error("Failed to create window");
