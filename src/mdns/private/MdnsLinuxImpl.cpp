@@ -327,6 +327,9 @@ mdns::MdnsHelper::BackendImpl::send_multicast(sock_fd_t sock, void const* buffer
     return 0;
 }
 
+mdns::MdnsHelper::BackendImpl::BackendImpl()  = default;
+mdns::MdnsHelper::BackendImpl::~BackendImpl() = default;
+
 void
 mdns::MdnsHelper::BackendImpl::close(sock_fd_t sock) {
     ::close(sock);

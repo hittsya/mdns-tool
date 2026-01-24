@@ -12,93 +12,97 @@
 
 namespace {
 
-    std::string winError()
-    {
-        return std::to_string(WSAGetLastError());
+std::string 
+winError()
+{
+    return std::to_string(WSAGetLastError());
+}
+
+void 
+setNonBlocking(SOCKET s)
+{
+    u_long mode = 1;
+    ioctlsocket(s, FIONBIO, &mode);
+}
+
+SOCKET 
+initIpv4Socket(sockaddr_in* ifaceAddr, int port)
+{
+    SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock == INVALID_SOCKET) {
+        logger::mdns()->error("IPv4 socket() failed: " + winError());
+        return INVALID_SOCKET;
     }
 
-    void setNonBlocking(SOCKET s)
-    {
-        u_long mode = 1;
-        ioctlsocket(s, FIONBIO, &mode);
+    BOOL reuse = TRUE;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
+
+    sockaddr_in bindAddr{};
+    bindAddr.sin_family = AF_INET;
+    bindAddr.sin_port   = htons(port);
+    bindAddr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(sock, (sockaddr*)&bindAddr, sizeof(bindAddr)) == SOCKET_ERROR) {
+        logger::mdns()->error("IPv4 bind() failed: " + winError());
+        closesocket(sock);
+        return INVALID_SOCKET;
     }
 
-    SOCKET initIpv4Socket(sockaddr_in* ifaceAddr, int port)
-    {
-        SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock == INVALID_SOCKET) {
-            logger::mdns()->error("IPv4 socket() failed: " + winError());
-            return INVALID_SOCKET;
-        }
+    ip_mreq req{};
+    inet_pton(AF_INET, "224.0.0.251", &req.imr_multiaddr);
+    req.imr_interface = ifaceAddr->sin_addr;
 
-        BOOL reuse = TRUE;
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
-
-        sockaddr_in bindAddr{};
-        bindAddr.sin_family = AF_INET;
-        bindAddr.sin_port   = htons(port);
-        bindAddr.sin_addr.s_addr = INADDR_ANY;
-
-        if (bind(sock, (sockaddr*)&bindAddr, sizeof(bindAddr)) == SOCKET_ERROR) {
-            logger::mdns()->error("IPv4 bind() failed: " + winError());
-            closesocket(sock);
-            return INVALID_SOCKET;
-        }
-
-        ip_mreq req{};
-        inet_pton(AF_INET, "224.0.0.251", &req.imr_multiaddr);
-        req.imr_interface = ifaceAddr->sin_addr;
-
-        if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-            (char*)&req, sizeof(req)) == SOCKET_ERROR) {
-            logger::mdns()->error("IPv4 IP_ADD_MEMBERSHIP failed: " + winError());
-            closesocket(sock);
-            return INVALID_SOCKET;
-        }
-
-        setNonBlocking(sock);
-        return sock;
+    if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+        (char*)&req, sizeof(req)) == SOCKET_ERROR) {
+        logger::mdns()->error("IPv4 IP_ADD_MEMBERSHIP failed: " + winError());
+        closesocket(sock);
+        return INVALID_SOCKET;
     }
 
-    SOCKET initIpv6Socket(sockaddr_in6* ifaceAddr, ULONG ifIndex, int port)
-    {
-        SOCKET sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock == INVALID_SOCKET) {
-            logger::mdns()->error("IPv6 socket() failed: " + winError());
-            return INVALID_SOCKET;
-        }
+    setNonBlocking(sock);
+    return sock;
+}
 
-        BOOL reuse = TRUE;
-        setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
-
-        int v6only = 1;
-        setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&v6only, sizeof(v6only));
-
-        sockaddr_in6 bindAddr{};
-        bindAddr.sin6_family = AF_INET6;
-        bindAddr.sin6_port = htons(port);
-        bindAddr.sin6_addr = in6addr_any;
-
-        if (bind(sock, (sockaddr*)&bindAddr, sizeof(bindAddr)) == SOCKET_ERROR) {
-            logger::mdns()->error("IPv6 bind() failed: " + winError());
-            closesocket(sock);
-            return INVALID_SOCKET;
-        }
-
-        ipv6_mreq req{};
-        inet_pton(AF_INET6, "ff02::fb", &req.ipv6mr_multiaddr);
-        req.ipv6mr_interface = ifIndex;
-
-        if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
-            (char*)&req, sizeof(req)) == SOCKET_ERROR) {
-            logger::mdns()->error("IPv6 IPV6_JOIN_GROUP failed: " + winError());
-            closesocket(sock);
-            return INVALID_SOCKET;
-        }
-
-        setNonBlocking(sock);
-        return sock;
+SOCKET 
+initIpv6Socket(sockaddr_in6* ifaceAddr, ULONG ifIndex, int port)
+{
+    SOCKET sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock == INVALID_SOCKET) {
+        logger::mdns()->error("IPv6 socket() failed: " + winError());
+        return INVALID_SOCKET;
     }
+
+    BOOL reuse = TRUE;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
+
+    int v6only = 1;
+    setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, (char*)&v6only, sizeof(v6only));
+
+    sockaddr_in6 bindAddr{};
+    bindAddr.sin6_family = AF_INET6;
+    bindAddr.sin6_port = htons(port);
+    bindAddr.sin6_addr = in6addr_any;
+
+    if (bind(sock, (sockaddr*)&bindAddr, sizeof(bindAddr)) == SOCKET_ERROR) {
+        logger::mdns()->error("IPv6 bind() failed: " + winError());
+        closesocket(sock);
+        return INVALID_SOCKET;
+    }
+
+    ipv6_mreq req{};
+    inet_pton(AF_INET6, "ff02::fb", &req.ipv6mr_multiaddr);
+    req.ipv6mr_interface = ifIndex;
+
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+        (char*)&req, sizeof(req)) == SOCKET_ERROR) {
+        logger::mdns()->error("IPv6 IPV6_JOIN_GROUP failed: " + winError());
+        closesocket(sock);
+        return INVALID_SOCKET;
+    }
+
+    setNonBlocking(sock);
+    return sock;
+}
 
 }
 
