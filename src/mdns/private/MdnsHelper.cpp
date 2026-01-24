@@ -26,6 +26,7 @@ void mdns::MdnsHelper::startBrowse() {
     if (connections.empty()) {
         logger::mdns()->error("No sockets opened");
         browsing_.store(false, std::memory_order_relaxed);
+        on_browsing_state_changed_(false);
         return;
     }
     logger::mdns()->info("Opened " + std::to_string(connections.size()) + " sockets");
@@ -34,6 +35,7 @@ void mdns::MdnsHelper::startBrowse() {
         [this, connections = std::move(connections)]
         (std::stop_token stop_token) mutable -> void {
             logger::mdns()->info("Starting continuous mDNS discovery");
+            on_browsing_state_changed_(true);
             runDiscovery(stop_token, std::move(connections));
     });
 }
@@ -52,6 +54,7 @@ void mdns::MdnsHelper::stopBrowse() {
     }
     
     logger::mdns()->info("mDNS discovery stopped");
+    on_browsing_state_changed_(false);
 }
 
 void
@@ -99,6 +102,7 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t
                 serializeRR(entry, answer);
         }
 
+        on_service_discovered_(std::move(result));
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
@@ -305,4 +309,14 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     response.port        = message.port;
 
     return response;
+}
+
+void 
+mdns::MdnsHelper::connectOnServiceDiscovered(service_dicovered_cb cb) {
+    on_service_discovered_ = std::move(cb);
+}
+
+void 
+mdns::MdnsHelper::connectOnBrowsingStateChanged(browse_en_cb cb) {
+    on_browsing_state_changed_ = std::move(cb);
 }

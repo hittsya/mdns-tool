@@ -1,4 +1,4 @@
-#include <Application.h>
+﻿#include <Application.h>
 
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
@@ -73,6 +73,18 @@ mdns::engine::Application::Application(int width, int height, const char* title)
 
     setUIScalingFactor(m_ui_scaling_factor);
     logger::core()->info("ImGUI initialized");
+
+    m_mdns_helper.connectOnServiceDiscovered(
+        [this](std::vector<proto::mdns_response>&& responses) -> void {
+            onScanDataReady(std::move(responses));
+        }
+	);
+
+    m_mdns_helper.connectOnBrowsingStateChanged(
+        [this](bool enabled) -> void {
+			m_discovery_running = enabled;
+        }
+    );
 }
 
 mdns::engine::Application::~Application()
@@ -167,36 +179,46 @@ mdns::engine::Application::renderUI()
 }
 
 void 
-mdns::engine::Application::renderServiceCard(int index, std::string const& name, std::string const ipAddr, std::uint16_t port)
+mdns::engine::Application::renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port)
 {
-    ImGui::PushID(index);
-    ImGui::BeginChild("ServiceCard", ImVec2(0, 130), true, ImGuiWindowFlags_NoScrollbar);
+	auto const height = calcServiceCardHeight(ipAddrs.size());
 
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    ImGui::PushID(index);
+    ImGui::BeginChild("ServiceCard", ImVec2(0, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     ImGui::SetWindowFontScale(1.1f);
 
     float windowWidth = ImGui::GetContentRegionAvail().x;
     float textWidth = ImGui::CalcTextSize(name.c_str()).x;
 
-    ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
-    ImGui::TextUnformatted(name.c_str());
-
+    ImGui::SeparatorText(name.c_str());
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleVar();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     ImGui::Text("Hostname:");
-    ImGui::SameLine(160);
+    ImGui::SameLine(200);
     ImGui::Text("%s", name.c_str());
 
-    ImGui::Text("IP Address:");
-    ImGui::SameLine(160);
-    ImGui::Text("%s", ipAddr.c_str());
+    ImGui::Dummy(ImVec2(0.0f, 3.0f));
+    ImGui::Text("IP Address(es):");
+    ImGui::SameLine(200);
+    ImGui::Indent(190);
+
+    for (auto const& ipAddr: ipAddrs) {
+        ImGui::PushID(ipAddr.c_str());
+        ImGui::Selectable(ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns);
+        ImGui::PopID();
+    }
+
+    ImGui::Unindent(190);
+    ImGui::Dummy(ImVec2(0.0f, 3.0f));
 
     ImGui::Text("Port:");
-    ImGui::SameLine(160);
+    ImGui::SameLine(200);
     ImGui::Text("%d", port);
+
+    ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     if (ImGui::Button("Open in browser")) {
 
@@ -217,53 +239,14 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
 void
 mdns::engine::Application::renderFoundServices()
 {
-    for (std::size_t entry_idx = 0; entry_idx < m_discovered_services.size(); ++entry_idx) {
-        auto const& target_service = m_discovered_services[entry_idx];
-
-        for (std::size_t answer_idx = 0; answer_idx < target_service.answer_rrs.size(); ++answer_idx) {
-            auto const target_answer = target_service.answer_rrs[answer_idx];
-			
-            renderServiceCard(
-                0 + entry_idx + answer_idx, 
-                target_answer.rdata_serialized, 
-                target_service.ip_addr_str, 
-                target_service.port
-            );
-        }
-
-        for (std::size_t answer_idx = 0; answer_idx < target_service.additional_rrs.size(); ++answer_idx) {
-            auto const target_answer = target_service.additional_rrs[answer_idx];
-
-            renderServiceCard(
-                1 + entry_idx + answer_idx,
-                target_answer.rdata_serialized,
-                target_service.ip_addr_str,
-                target_service.port
-            );
-        }
-
-        for (std::size_t answer_idx = 0; answer_idx < target_service.authority_rrs.size(); ++answer_idx) {
-            auto const target_answer = target_service.authority_rrs[answer_idx];
-
-            renderServiceCard(
-                2 + entry_idx + answer_idx,
-                target_answer.rdata_serialized,
-                target_service.ip_addr_str,
-                target_service.port
-            );
-        }
-
-        for (std::size_t answer_idx = 0; answer_idx < target_service.questions_list.size(); ++answer_idx) {
-            auto const target_question = target_service.questions_list[answer_idx];
-
-            renderServiceCard(
-                3 + entry_idx + answer_idx,
-                target_question.name,
-                target_service.ip_addr_str,
-                target_service.port
-            );
-        }
-    }
+    for (auto const& service: m_discovered_services) {
+        renderServiceCard(
+            static_cast<int>(&service - &m_discovered_services[0]),
+            service.name,
+            service.ip_addresses,
+            service.port
+        );
+	}
 }
 
 void
@@ -291,4 +274,83 @@ mdns::engine::Application::renderDiscoveryLayout()
 
         renderFoundServices();
     }
+}
+
+void 
+mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response>&& responses)
+{
+    ScanCardEntry entry;
+
+    for (std::size_t entry_idx = 0; entry_idx < responses.size(); ++entry_idx) {
+        auto const& target_service = responses[entry_idx];
+        entry.ip_addresses = { target_service.ip_addr_str };
+        entry.port         = target_service.port;
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.answer_rrs.size(); ++answer_idx) {
+			entry.name = target_service.answer_rrs[answer_idx].rdata_serialized;
+            tryAddService(entry);
+        }
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.additional_rrs.size(); ++answer_idx) {
+            entry.name = target_service.additional_rrs[answer_idx].rdata_serialized;
+            tryAddService(entry);
+        }
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.authority_rrs.size(); ++answer_idx) {
+            entry.name = target_service.authority_rrs[answer_idx].rdata_serialized;
+            tryAddService(entry);
+        }
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.questions_list.size(); ++answer_idx) {
+            entry.name = target_service.questions_list[answer_idx].name;
+            tryAddService(entry);
+        }
+    }
+}
+
+void
+mdns::engine::Application::tryAddService(ScanCardEntry entry)
+{
+    auto serviceIt = std::find(m_discovered_services.begin(), m_discovered_services.end(), entry);
+    if (serviceIt == m_discovered_services.end()) {
+        m_discovered_services.push_back(std::move(entry));
+        return;
+	}
+
+    auto ipIt = std::find(
+        serviceIt->ip_addresses.begin(),
+        serviceIt->ip_addresses.end(),
+        entry.ip_addresses.front()
+	);
+
+	if (ipIt == serviceIt->ip_addresses.end()) {
+        serviceIt->ip_addresses.push_back(entry.ip_addresses.front());
+    }
+}
+
+float 
+mdns::engine::Application::calcServiceCardHeight(std::size_t ipCount)
+{
+    ImGuiStyle const& style = ImGui::GetStyle();
+    ImGuiIO const& io       = ImGui::GetIO();
+
+    const float line    = ImGui::GetTextLineHeight();
+    const float spacing = style.ItemSpacing.y;
+    const float padding = style.WindowPadding.y * 2.0f;
+    const float frame   = style.FramePadding.y * 2.0f;
+
+    float height = 0.0f;
+    height += line * 1.1f + spacing;
+    height += 4.0f;
+    height += line + spacing;
+    height += 3.0f;
+    height += line;
+    height += ipCount * (line + spacing);
+    height += 3.0f;
+    height += line + spacing;
+    height += 8.0f;
+    height += ImGui::GetFrameHeight() + spacing;
+    height += padding + frame;
+
+    return height;
 }
