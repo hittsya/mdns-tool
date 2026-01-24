@@ -84,7 +84,9 @@ static constexpr uint8_t mdns_services_query[] = {
     // PTR record
     0x00, MDNS_RECORDTYPE_PTR,
     // QU (unicast response) and class IN
-    0x80, MDNS_CLASS_IN};
+    0x80, MDNS_CLASS_IN
+};
+
 }
 
 #endif // PROTO_H

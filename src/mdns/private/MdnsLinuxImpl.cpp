@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/fcntl.h>
+#include <net/if.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstdio>
@@ -113,32 +114,100 @@ int initalizeIpv4Socket(ifaddrs *ifa, sockaddr_in *sockaddr, int port) {
         return -1;
     }
 
+    sockaddr_in bind_addr = {};
+    bind_addr.sin_family = AF_INET;
+    bind_addr.sin_port = htons(port);
+    bind_addr.sin_addr.s_addr = INADDR_ANY;
+    
+    if (bind(sock, reinterpret_cast<::sockaddr *>(&bind_addr), sizeof(bind_addr)) < 0) {
+        logger::mdns()->error("Error binding socket: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
     ip_mreq req = {};
     req.imr_multiaddr.s_addr = htonl((((uint32_t)224U) << 24U) | ((uint32_t)251U));
-    req.imr_interface        = sockaddr->sin_addr;
-
-    if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req))) {
-        logger::mdns()->error("Error setting IP_ADD_MEMBERSHIP socket options");
+    req.imr_interface = sockaddr->sin_addr;
+    
+    if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &req, sizeof(req)) < 0) {
+        logger::mdns()->error("Error setting IP_ADD_MEMBERSHIP socket options: " + getErrnoString());
         ::close(sock);
         return -1;
     }
-
-    if (bind(sock, reinterpret_cast<::sockaddr *>(sockaddr), sizeof(sockaddr_in))) {
-        logger::mdns()->error("Error binding socket");
-        ::close(sock);
-        return -1;
-    }
-
+    
     auto const flags = fcntl(sock, F_GETFL, 0);
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
-
-    logger::mdns()->trace("Socket successfully created");
+    sockaddr->sin_port = htons(port);
     return sock;
 }
 
 int initalizeIpv6Socket(ifaddrs *ifa, sockaddr_in6 *sockaddr, int port) {
     sockaddr->sin6_port = htons(port);
-    return -1;
+    
+    auto sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+    if (sock < 0) {
+        logger::mdns()->error("Error creating IPv6 socket: " + getErrnoString());
+        return -1;
+    }
+    
+    unsigned int ttl       = 1;
+    unsigned int loopback  = 1;
+    unsigned int reuseaddr = 1;
+    
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(reuseaddr)) < 0) {
+        logger::mdns()->error("Error setting SO_REUSEADDR socket option: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
+#ifdef SO_REUSEPORT
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEPORT, &reuseaddr, sizeof(reuseaddr)) < 0) {
+        logger::mdns()->error("Error setting SO_REUSEPORT socket option: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+#endif
+    
+    int ipv6only = 1;
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &ipv6only, sizeof(ipv6only)) < 0) {
+        logger::mdns()->error("Error setting IPV6_V6ONLY socket option: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &ttl, sizeof(ttl)) < 0) {
+        logger::mdns()->error("Error setting IPV6_MULTICAST_HOPS socket option: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loopback, sizeof(loopback)) < 0) {
+        logger::mdns()->error("Error setting IPV6_MULTICAST_LOOP socket option: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
+    ipv6_mreq req = {};
+    req.ipv6mr_multiaddr.s6_addr[0]  = 0xff;
+    req.ipv6mr_multiaddr.s6_addr[1]  = 0x02;
+    req.ipv6mr_multiaddr.s6_addr[15] = 0xfb;
+    
+    req.ipv6mr_interface = if_nametoindex(ifa->ifa_name);
+    if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &req, sizeof(req)) < 0) {
+        logger::mdns()->error("Error setting IPV6_JOIN_GROUP socket option: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
+    if (bind(sock, reinterpret_cast<::sockaddr*>(sockaddr), sizeof(sockaddr_in6)) < 0) {
+        logger::mdns()->error("Error binding IPv6 socket: " + getErrnoString());
+        ::close(sock);
+        return -1;
+    }
+    
+    auto const flags = fcntl(sock, F_GETFL, 0);
+    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    return sock;
 }
 
 }
@@ -196,7 +265,8 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
                 continue;
             }
 
-            logger::mdns()->trace("Init IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+            logger::mdns()->trace("Init IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in6)));
+            result.push_back(sock);
         }
     }
 
@@ -269,8 +339,8 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
     result.reserve(sockets.size());
 
     timeval timeout{};
-    timeout.tv_sec  = 5;
-    timeout.tv_usec = 0;
+    timeout.tv_sec  = 0;
+    timeout.tv_usec = 100000;
 
     fd_set readfs;
     FD_ZERO(&readfs);
@@ -282,7 +352,12 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
     }
 
     int res = select(nfds, &readfs, nullptr, nullptr, &timeout);
-    if (res <= 0) {
+    if (res < 0) {
+        logger::mdns()->error("select() failed: " + std::string(strerror(errno)));
+        return result;
+    }
+    else if(res == 0) {
+        // logger::mdns()->warn("select() timeout: no responses received");
         return result;
     }
 
@@ -290,8 +365,9 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
     uint16_t port = 0;
 
     for (auto socket : sockets) {
-        if (!FD_ISSET(socket, &readfs))
+        if (!FD_ISSET(socket, &readfs)) {
             continue;
+        }
 
         while (true) {
             char buffer[RECV_BUFF_SIZE];
@@ -300,7 +376,7 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
             socklen_t addrlen = sizeof(addr);
 
             auto ret = recvfrom(socket, buffer, sizeof(buffer), 0, reinterpret_cast<sockaddr*>(&addr), &addrlen);
-            if (ret > 0) {
+            if (ret > 0) {                
                 if (addr.ss_family == AF_INET) {
                     auto* a = reinterpret_cast<sockaddr_in*>(&addr);
                     inet_ntop(AF_INET, &a->sin_addr, ipStr, sizeof(ipStr));
@@ -321,8 +397,9 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
                 continue;
             }
 
-            if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            if (ret < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
                 break;
+            }
 
             if (ret == 0) {
                 logger::mdns()->warn("Zero-length UDP datagram ignored");

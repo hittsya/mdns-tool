@@ -16,33 +16,88 @@ mdns::MdnsHelper::MdnsHelper()
 
 mdns::MdnsHelper::~MdnsHelper() = default;
 
-std::optional<std::vector<mdns::proto::mdns_response>>
-mdns::MdnsHelper::runDiscovery()
+void mdns::MdnsHelper::startBrowse() {
+    if (browsing_.exchange(true)) {
+        logger::mdns()->warn("Discovery already running");
+        return;
+    }
+    
+    logger::mdns()->info("Starting continuous mDNS discovery");
+    
+    browsing_thread_ = std::jthread([this](std::stop_token stop_token) -> void {
+        runDiscovery(stop_token);
+    });
+}
+
+void mdns::MdnsHelper::stopBrowse() {
+    if (!browsing_.exchange(false)) {
+        logger::mdns()->warn("Discovery not running");
+        return;
+    }
+    
+    logger::mdns()->info("Stopping mDNS discovery");
+    
+    browsing_thread_.request_stop();
+    if (browsing_thread_.joinable()) {
+        browsing_thread_.join();
+    }
+    
+    logger::mdns()->info("mDNS discovery stopped");
+}
+
+void
+mdns::MdnsHelper::runDiscovery(std::stop_token stop_token)
 {
-    auto const connections = impl_->open_client_sockets_foreach_iface(32, 0);
+    auto const connections = impl_->open_client_sockets_foreach_iface(32, 5353);
     if (connections.empty()) {
         logger::mdns()->error("No sockets opened");
-        return std::nullopt;
+        return;
     }
-
     logger::mdns()->info("Opened " + std::to_string(connections.size()) + " sockets");
-    logger::mdns()->info("Sending DNS-SD discovery");
+    
+    const auto query_interval = std::chrono::milliseconds(2500);
+    auto last_query_time      = std::chrono::steady_clock::now() - query_interval;
 
-    for (auto const socket: connections) {
-        // TODO: Remove from list?
-        impl_->send_multicast(socket, proto::mdns_services_query, sizeof(proto::mdns_services_query));
-    }
+    while(!stop_token.stop_requested()) {
+        auto now = std::chrono::steady_clock::now();
+        
+        if (now - last_query_time >= query_interval) {
+            logger::mdns()->info("Sending DNS-SD discovery");
 
-    std::vector<proto::mdns_response> result;
+            for (auto const socket: connections) {
+                // TODO: Remove from list?
+                impl_->send_multicast(socket, proto::mdns_services_query, sizeof(proto::mdns_services_query));
+            }
 
-    auto const messages = impl_->receive_discovery(connections);
-    for (auto const& message: messages) {
-        logger::mdns()->trace("Processing multicast (" + std::to_string(message.blob.size()) + " bytes)");
-
-        auto const parsed = parseDiscoveryResponse(message);
-        if (parsed.has_value()) {
-            result.push_back(parsed.value());
+            last_query_time = now;
         }
+
+        std::vector<proto::mdns_response> result;
+
+        auto const messages = impl_->receive_discovery(connections);
+        for (auto const& message: messages) {
+            logger::mdns()->trace("Processing multicast (" + std::to_string(message.blob.size()) + " bytes)");
+
+            auto const parsed = parseDiscoveryResponse(message);
+            if (parsed.has_value()) {
+                result.push_back(parsed.value());
+            } else {
+                logger::mdns()->warn("Multicast processing failed");
+            }
+        }
+
+        for (auto& entry: result) {
+            for (auto& answer: entry.answer_rrs)
+                serializeRR(entry, answer);
+
+            for (auto& answer: entry.authority_rrs)
+                serializeRR(entry, answer);
+
+            for (auto& answer: entry.additional_rrs)
+                serializeRR(entry, answer);
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
     logger::mdns()->info("Closing sockets");
@@ -50,18 +105,7 @@ mdns::MdnsHelper::runDiscovery()
         impl_->close(socket);
     }
 
-    for (auto& entry: result) {
-        for (auto& answer: entry.answer_rrs)
-            serializeRR(entry, answer);
-
-        for (auto& answer: entry.authority_rrs)
-            serializeRR(entry, answer);
-
-        for (auto& answer: entry.additional_rrs)
-            serializeRR(entry, answer);
-    }
-
-    return result;
+    logger::mdns()->info("Browsing thread stopped");
 }
 
 bool
@@ -169,7 +213,6 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t *start, c
     record.ttl   = readU32(ptr);
 
     std::uint16_t rdlen = readU16(ptr);
-
     record.rdata.assign(ptr, ptr + rdlen);
     ptr += rdlen;
 
@@ -194,8 +237,7 @@ std::optional<mdns::proto::mdns_response>
 mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     auto const& buffer = message.blob;
 
-    // TODO: OFFSETOFF
-    if (buffer.size() < 12) {
+    if (buffer.size() < sizeof(std::uint16_t)*6) {
         logger::mdns()->warn("mDNS packet too small: " + std::to_string(buffer.size()) + " bytes");
         return std::nullopt;
     }
@@ -225,14 +267,12 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     ));
 
     if (response.query_id != 0 || response.flags != 0x8400) {
-        logger::mdns()->warn(
-            "Skipping mDNS response: query_id=" +
+        logger::mdns()->trace(
+            "Skipping unsolicited announcement: query_id=" +
                 std::to_string(response.query_id) +
             " flags=0x" +
                 fmt::format("{:04X}", response.flags)
         );
-
-        return std::nullopt;
     }
 
     for (std::uint16_t i = 0; i < response.questions; ++i) {
@@ -247,21 +287,15 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     }
 
     for (std::uint16_t i = 0; i < answer_rrs; ++i) {
-        response.answer_rrs.push_back(
-            parseRR(data, packet_start, packet_end)
-        );
+        response.answer_rrs.push_back(parseRR(data, packet_start, packet_end));
     }
 
     for (std::uint16_t i = 0; i < authority_rrs; ++i) {
-        response.authority_rrs.push_back(
-            parseRR(data, packet_start, packet_end)
-        );
+        response.authority_rrs.push_back(parseRR(data, packet_start, packet_end));
     }
 
     for (std::uint16_t i = 0; i < additional_rrs; ++i) {
-        response.additional_rrs.push_back(
-            parseRR(data, packet_start, packet_end)
-        );
+        response.additional_rrs.push_back(parseRR(data, packet_start, packet_end));
     }
 
     response.ip_addr_str = std::move(message.ip_addr_str);

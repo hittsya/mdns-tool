@@ -133,12 +133,23 @@ mdns::engine::Application::renderDiscoveryLayout()
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(300);
-
+        
+        // auto const browsing = m_mdns_helper.browsing();
         if (ImGui::Button("Browse")) {
-           auto const result = m_mdns_helper.runDiscovery();
-           if (result.has_value()) {
-               m_discovered_services = std::move(result.value());
-           }
+           m_mdns_helper.startBrowse();
+        //    if (result.has_value()) {
+        //        m_discovered_services = std::move(result.value());
+        //    }
+        }
+
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(300);
+
+        if (ImGui::Button("Stop")) {
+           m_mdns_helper.stopBrowse();
+        //    if (result.has_value()) {
+        //        m_discovered_services = std::move(result.value());
+        //    }
         }
 
         for (std::size_t entry_idx = 0; entry_idx < m_discovered_services.size(); ++entry_idx) {
