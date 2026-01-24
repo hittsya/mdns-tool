@@ -22,10 +22,19 @@ void mdns::MdnsHelper::startBrowse() {
         return;
     }
     
-    logger::mdns()->info("Starting continuous mDNS discovery");
+    auto connections = impl_->open_client_sockets_foreach_iface(32, 5353);
+    if (connections.empty()) {
+        logger::mdns()->error("No sockets opened");
+        browsing_.store(false, std::memory_order_relaxed);
+        return;
+    }
+    logger::mdns()->info("Opened " + std::to_string(connections.size()) + " sockets");
     
-    browsing_thread_ = std::jthread([this](std::stop_token stop_token) -> void {
-        runDiscovery(stop_token);
+    browsing_thread_ = std::jthread(
+        [this, connections = std::move(connections)]
+        (std::stop_token stop_token) mutable -> void {
+            logger::mdns()->info("Starting continuous mDNS discovery");
+            runDiscovery(stop_token, std::move(connections));
     });
 }
 
@@ -46,15 +55,8 @@ void mdns::MdnsHelper::stopBrowse() {
 }
 
 void
-mdns::MdnsHelper::runDiscovery(std::stop_token stop_token)
+mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t>&& sockets)
 {
-    auto const connections = impl_->open_client_sockets_foreach_iface(32, 5353);
-    if (connections.empty()) {
-        logger::mdns()->error("No sockets opened");
-        return;
-    }
-    logger::mdns()->info("Opened " + std::to_string(connections.size()) + " sockets");
-    
     const auto query_interval = std::chrono::milliseconds(2500);
     auto last_query_time      = std::chrono::steady_clock::now() - query_interval;
 
@@ -64,7 +66,7 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token)
         if (now - last_query_time >= query_interval) {
             logger::mdns()->info("Sending DNS-SD discovery");
 
-            for (auto const socket: connections) {
+            for (auto const socket: sockets) {
                 // TODO: Remove from list?
                 impl_->send_multicast(socket, proto::mdns_services_query, sizeof(proto::mdns_services_query));
             }
@@ -74,7 +76,7 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token)
 
         std::vector<proto::mdns_response> result;
 
-        auto const messages = impl_->receive_discovery(connections);
+        auto const messages = impl_->receive_discovery(sockets);
         for (auto const& message: messages) {
             logger::mdns()->trace("Processing multicast (" + std::to_string(message.blob.size()) + " bytes)");
 
@@ -101,7 +103,7 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token)
     }
 
     logger::mdns()->info("Closing sockets");
-    for (auto const socket: connections) {
+    for (auto const socket: sockets) {
         impl_->close(socket);
     }
 
@@ -298,8 +300,8 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
         response.additional_rrs.push_back(parseRR(data, packet_start, packet_end));
     }
 
-    response.ip_addr_str = std::move(message.ip_addr_str);
-    response.port        = std::move(message.port);
+    response.ip_addr_str = message.ip_addr_str;
+    response.port        = message.port;
 
     return response;
 }

@@ -1,3 +1,5 @@
+#ifndef WIN32
+
 #include "MdnsImpl.hpp"
 #include <Logger.h>
 #include "../include/Proto.h"
@@ -413,3 +415,5 @@ mdns::MdnsHelper::BackendImpl::receive_discovery(std::vector<sock_fd_t> const& s
 
     return result;
 }
+
+#endif // WIN32
