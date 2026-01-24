@@ -268,24 +268,25 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
             additional_rrs
     ));
 
-    if (response.query_id != 0 || response.flags != 0x8400) {
-        logger::mdns()->trace(
-            "Skipping unsolicited announcement: query_id=" +
-                std::to_string(response.query_id) +
-            " flags=0x" +
-                fmt::format("{:04X}", response.flags)
-        );
-    }
-
     for (std::uint16_t i = 0; i < response.questions; ++i) {
-        std::string qname;
-        data = parseName(data, packet_start, packet_end, qname);
+        proto::mdns_question q;
 
+        data = parseName(data, packet_start, packet_end, q.name);
         if (data + 4 > packet_end) {
+			logger::mdns()->error("Malformed packet (truncated question)");
             return std::nullopt;
         }
 
-        data += 4;
+        if (q.name == "_services._dns-sd._udp.local") {
+            // We found ourselfs
+            continue;
+        }
+
+        q.type  = readU16(data);
+        q.clazz = readU16(data);
+
+        logger::mdns()->info("Pushed anouncment: " + q.name);
+        response.questions_list.push_back(std::move(q));
     }
 
     for (std::uint16_t i = 0; i < answer_rrs; ++i) {

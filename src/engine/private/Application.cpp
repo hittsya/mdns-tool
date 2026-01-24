@@ -6,6 +6,10 @@
 #include <stdexcept>
 #include <Logger.h>
 
+#if defined(WIN32)
+    #include "windows.h"
+#endif
+
 #if defined(__APPLE__)
     #define GL_SILENCE_DEPRECATION
 #endif
@@ -32,11 +36,24 @@ mdns::engine::Application::Application(int width, int height, const char* title)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #endif
 
+#if defined(WIN32)
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+#endif
+
     m_window = glfwCreateWindow(m_width, m_height, m_title, nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
         throw std::runtime_error("Failed to create window");
     }
+
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+    glfwSetWindowContentScaleCallback(
+        m_window,
+        [](GLFWwindow*, float xscale, float yscale) {
+            ImGuiIO& io = ImGui::GetIO();
+            io.FontGlobalScale = xscale;
+        }
+    );
 
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1);
@@ -50,6 +67,11 @@ mdns::engine::Application::Application(int width, int height, const char* title)
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
+
+    m_ui_scaling_factor = getMonitorScalingFactor();
+    logger::core()->info("Monitor scaling is " + std::to_string(m_ui_scaling_factor));
+
+    setUIScalingFactor(m_ui_scaling_factor);
     logger::core()->info("ImGUI initialized");
 }
 
@@ -68,6 +90,28 @@ mdns::engine::Application::~Application()
     logger::core()->info("Shutting down logger");
 
     logger::shutdown();
+}
+
+float 
+mdns::engine::Application::getMonitorScalingFactor()
+{
+    float xscale, yscale;
+    glfwGetWindowContentScale(m_window, &xscale, &yscale);
+    return xscale;
+}
+
+void 
+mdns::engine::Application::setUIScalingFactor(float scalingFactor)
+{
+    ImFontConfig cfg;
+    cfg.SizePixels = 13.0f * scalingFactor;
+
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::GetStyle().ScaleAllSizes(scalingFactor);
+
+    io.Fonts->Clear();
+    io.Fonts->AddFontDefault(&cfg);
+    io.Fonts->Build();
 }
 
 void
@@ -122,6 +166,106 @@ mdns::engine::Application::renderUI()
     ImGui::PopStyleVar(2);
 }
 
+void 
+mdns::engine::Application::renderServiceCard(int index, std::string const& name, std::string const ipAddr, std::uint16_t port)
+{
+    ImGui::PushID(index);
+    ImGui::BeginChild("ServiceCard", ImVec2(0, 130), true, ImGuiWindowFlags_NoScrollbar);
+
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+    ImGui::SetWindowFontScale(1.1f);
+
+    float windowWidth = ImGui::GetContentRegionAvail().x;
+    float textWidth = ImGui::CalcTextSize(name.c_str()).x;
+
+    ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+    ImGui::TextUnformatted(name.c_str());
+
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleVar();
+    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+
+    ImGui::Text("Hostname:");
+    ImGui::SameLine(160);
+    ImGui::Text("%s", name.c_str());
+
+    ImGui::Text("IP Address:");
+    ImGui::SameLine(160);
+    ImGui::Text("%s", ipAddr.c_str());
+
+    ImGui::Text("Port:");
+    ImGui::SameLine(160);
+    ImGui::Text("%d", port);
+
+    if (ImGui::Button("Open in browser")) {
+
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Advanced data")) {
+
+    }
+
+    ImGui::EndChild();
+    ImGui::Spacing();
+    ImGui::PopID();
+}
+
+
+void
+mdns::engine::Application::renderFoundServices()
+{
+    for (std::size_t entry_idx = 0; entry_idx < m_discovered_services.size(); ++entry_idx) {
+        auto const& target_service = m_discovered_services[entry_idx];
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.answer_rrs.size(); ++answer_idx) {
+            auto const target_answer = target_service.answer_rrs[answer_idx];
+			
+            renderServiceCard(
+                0 + entry_idx + answer_idx, 
+                target_answer.rdata_serialized, 
+                target_service.ip_addr_str, 
+                target_service.port
+            );
+        }
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.additional_rrs.size(); ++answer_idx) {
+            auto const target_answer = target_service.additional_rrs[answer_idx];
+
+            renderServiceCard(
+                1 + entry_idx + answer_idx,
+                target_answer.rdata_serialized,
+                target_service.ip_addr_str,
+                target_service.port
+            );
+        }
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.authority_rrs.size(); ++answer_idx) {
+            auto const target_answer = target_service.authority_rrs[answer_idx];
+
+            renderServiceCard(
+                2 + entry_idx + answer_idx,
+                target_answer.rdata_serialized,
+                target_service.ip_addr_str,
+                target_service.port
+            );
+        }
+
+        for (std::size_t answer_idx = 0; answer_idx < target_service.questions_list.size(); ++answer_idx) {
+            auto const target_question = target_service.questions_list[answer_idx];
+
+            renderServiceCard(
+                3 + entry_idx + answer_idx,
+                target_question.name,
+                target_service.ip_addr_str,
+                target_service.port
+            );
+        }
+    }
+}
+
 void
 mdns::engine::Application::renderDiscoveryLayout()
 {
@@ -134,12 +278,8 @@ mdns::engine::Application::renderDiscoveryLayout()
         ImGui::SameLine();
         ImGui::SetNextItemWidth(300);
         
-        // auto const browsing = m_mdns_helper.browsing();
         if (ImGui::Button("Browse")) {
            m_mdns_helper.startBrowse();
-        //    if (result.has_value()) {
-        //        m_discovered_services = std::move(result.value());
-        //    }
         }
 
         ImGui::SameLine();
@@ -147,61 +287,8 @@ mdns::engine::Application::renderDiscoveryLayout()
 
         if (ImGui::Button("Stop")) {
            m_mdns_helper.stopBrowse();
-        //    if (result.has_value()) {
-        //        m_discovered_services = std::move(result.value());
-        //    }
         }
 
-        for (std::size_t entry_idx = 0; entry_idx < m_discovered_services.size(); ++entry_idx) {
-            auto const& target_service = m_discovered_services[entry_idx];
-
-            for (std::size_t answer_idx = 0; answer_idx < target_service.answer_rrs.size(); ++answer_idx) {
-                auto const target_answer = target_service.answer_rrs[answer_idx];
-
-                ImGui::PushID(entry_idx + answer_idx);
-                ImGui::BeginChild("ServiceCard", ImVec2(0, 130), true, ImGuiWindowFlags_NoScrollbar);
-
-                ImGui::Dummy(ImVec2(0.0f, 4.0f));
-                ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-                ImGui::SetWindowFontScale(1.1f);
-
-                float windowWidth = ImGui::GetContentRegionAvail().x;
-                float textWidth   = ImGui::CalcTextSize(target_answer.rdata_serialized.c_str()).x;
-
-                ImGui::SetCursorPosX  ((windowWidth - textWidth) * 0.5f);
-                ImGui::TextUnformatted(target_answer.rdata_serialized.c_str());
-
-                ImGui::SetWindowFontScale(1.0f);
-                ImGui::PopStyleVar();
-                ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-                ImGui::Text("Hostname:");
-                ImGui::SameLine(160);
-                ImGui::Text("%s", target_answer.rdata_serialized.c_str());
-
-                ImGui::Text("IP Address:");
-                ImGui::SameLine(160);
-                ImGui::Text("%s", target_service.ip_addr_str.c_str());
-
-                ImGui::Text("Port:");
-                ImGui::SameLine(160);
-                ImGui::Text("%d", target_service.port);
-
-                if (ImGui::Button("Open in browser")) {
-
-                }
-
-                ImGui::SameLine();
-
-                if (ImGui::Button("Advanced data")) {
-
-                }
-
-                ImGui::EndChild();
-                ImGui::Spacing();
-                ImGui::PopID();
-            }
-
-        }
+        renderFoundServices();
     }
 }

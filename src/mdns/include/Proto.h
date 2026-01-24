@@ -16,6 +16,12 @@ struct mdns_recv_res {
     std::vector<char> blob;
 };
 
+struct mdns_question {
+    std::string name;
+    uint16_t    type;
+    uint16_t    clazz;
+};
+
 struct mdns_rr {
     std::string           name;
     std::uint16_t         type;
@@ -30,10 +36,11 @@ struct mdns_response {
     std::uint16_t flags;
     std::uint16_t questions;
 
-    std::vector<mdns_rr> answer_rrs;
-    std::vector<mdns_rr> additional_rrs;
-    std::vector<mdns_rr> authority_rrs;
-    std::vector<uint8_t> packet;
+    std::vector<mdns_rr>       answer_rrs;
+    std::vector<mdns_rr>       additional_rrs;
+    std::vector<mdns_rr>       authority_rrs;
+    std::vector<mdns_question> questions_list;
+    std::vector<uint8_t>       packet;
 
     std::string   ip_addr_str;
     std::uint16_t port;
