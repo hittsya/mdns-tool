@@ -3,8 +3,10 @@ add_library(MDNS_Engine)
 target_sources(MDNS_Engine
         PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include/Application.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/Ping46.h
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/private/Application.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/Ping46.cpp
 )
 
 target_include_directories(MDNS_Engine

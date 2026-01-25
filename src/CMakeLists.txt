@@ -1,6 +1,6 @@
 add_executable(
     mdns_listener
-        main.cpp
+    main.cpp
 )
 
 add_subdirectory(logger)

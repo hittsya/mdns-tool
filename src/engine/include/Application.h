@@ -3,6 +3,7 @@
 
 #include <GLFW/glfw3.h>
 #include <MdnsHelper.h>
+#include <Ping46.h>
 
 namespace mdns::engine
 {
@@ -31,6 +32,7 @@ private:
     float calcServiceCardHeight(std::size_t ipCount);
     void renderUI();
     void renderDiscoveryLayout();
+    void renderRightSidebarLayout();
     void renderFoundServices();
     void renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port);
     void setUIScalingFactor(float scalingFactor);
@@ -41,7 +43,11 @@ private:
     std::string                       m_title;
     GLFWwindow*                       m_window = nullptr;
 	float                             m_ui_scaling_factor = 1.0f;
+    
     MdnsHelper                        m_mdns_helper;
+	PingTool                          m_ping_tool;
+    bool                              m_open_ping_view = false;
+
     std::vector<ScanCardEntry>        m_discovered_services;
 	bool                              m_discovery_running = false;
 };

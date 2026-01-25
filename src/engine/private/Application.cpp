@@ -1,6 +1,8 @@
 ﻿#include <Application.h>
+#include <Ping46.h>
 
 #include <imgui.h>
+#include <algorithm>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <stdexcept>
@@ -210,7 +212,24 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
 
     for (auto const& ipAddr: ipAddrs) {
         ImGui::PushID(ipAddr.c_str());
-        ImGui::Selectable(ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns);
+        
+        if(ImGui::Selectable(ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+            ImGui::OpenPopup("ip_actions_popup");
+        }
+
+        if (ImGui::BeginPopup("ip_actions_popup")) {
+            ImGui::Text("IP: %s", ipAddr.c_str());
+            ImGui::Separator();
+
+            if (ImGui::Button("Ping")) {
+				m_ping_tool.pingIpAddress(ipAddr);
+                m_open_ping_view = true;
+                ImGui::CloseCurrentPopup();
+            }
+
+            ImGui::EndPopup();
+        }
+
         ImGui::PopID();
     }
 
@@ -253,10 +272,69 @@ mdns::engine::Application::renderFoundServices()
 }
 
 void
+mdns::engine::Application::renderRightSidebarLayout()
+{
+    if (m_open_ping_view)
+    {
+        ImGui::SameLine();
+        ImGui::BeginGroup();
+
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
+        ImGui::Text("Ping Tool");
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
+        if (ImGui::Button("X##ClosePing")) {
+            m_ping_tool.stopPing();
+            m_open_ping_view = false;
+        }
+        
+        ImGui::PopStyleVar();
+        ImGui::Separator();
+        ImGui::BeginChild("PingPanel", ImVec2(600, 0), true);
+            
+        ImGui::Text("Statistics:");
+		
+        auto const& stats = m_ping_tool.getStats();
+        ImGui::Columns(2, "stats", false);
+        ImGui::Text("Sent: %d", stats.send);
+        ImGui::Text("Received: %d", stats.received);
+        ImGui::Text("Lost: %d", stats.lost);
+        ImGui::NextColumn();
+        ImGui::Text("Min: %.2f ms", stats.min);
+        ImGui::Text("Max: %.2f ms", stats.max);
+        ImGui::Text("Avg: %.2f ms", stats.average);
+        ImGui::Columns(1);
+
+        ImGui::Separator();
+
+        ImGui::Text("Response Time");
+        static int historyOffset = 0;
+
+        ImGui::PlotLines("##PingGraph", stats.history.data(), stats.history.size(), historyOffset, nullptr, 0.0f, 100.0f, ImVec2(-1, 80));
+        ImGui::Separator();
+
+        ImGui::Text("Output:");
+        ImGui::BeginChild("PingOutput", ImVec2(0, 0), true);
+
+        ImGui::Text(m_ping_tool.getOutput().data());
+
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY()) {
+            ImGui::SetScrollHereY(1.0f);
+        }
+
+        ImGui::EndChild();
+        ImGui::EndChild();
+        ImGui::EndGroup();
+    }
+}
+
+void
 mdns::engine::Application::renderDiscoveryLayout()
 {
     if (ImGui::CollapsingHeader("Browse mDNS services", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        ImGui::BeginGroup();
+        ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
+
         static char searchBuffer[128] = "";
         ImGui::SetNextItemWidth(250);
         ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));
@@ -264,18 +342,28 @@ mdns::engine::Application::renderDiscoveryLayout()
         ImGui::SameLine();
         ImGui::SetNextItemWidth(300);
         
+        ImGui::BeginDisabled(m_discovery_running);
         if (ImGui::Button("Browse")) {
-           m_mdns_helper.startBrowse();
+            m_mdns_helper.startBrowse();
         }
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
         ImGui::SetNextItemWidth(300);
 
+        ImGui::BeginDisabled(!m_discovery_running);
         if (ImGui::Button("Stop")) {
-           m_mdns_helper.stopBrowse();
+            m_mdns_helper.stopBrowse();
         }
+        ImGui::EndDisabled();
 
         renderFoundServices();
+
+        ImGui::EndChild();
+
+        renderRightSidebarLayout();
+
+        ImGui::EndGroup();
     }
 }
 
@@ -328,6 +416,21 @@ mdns::engine::Application::tryAddService(ScanCardEntry entry)
 
 	if (ipIt == serviceIt->ip_addresses.end()) {
         serviceIt->ip_addresses.push_back(entry.ip_addresses.front());
+
+        std::sort(
+            serviceIt->ip_addresses.begin(),
+            serviceIt->ip_addresses.end(),
+            [](std::string const& a, std::string const& b) -> bool {
+                const bool a4 = a.find(':') == std::string::npos;
+                const bool b4 = b.find(':') == std::string::npos;
+
+                if (a4 != b4) {
+                    return a4;
+                }
+
+                return a < b;
+            }
+        );
     }
 }
 
