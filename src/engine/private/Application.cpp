@@ -243,7 +243,7 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     if (ImGui::Button("Open in browser")) {
-
+        openInBrowser("https://" + name);
     }
 
     ImGui::SameLine();
@@ -269,6 +269,28 @@ mdns::engine::Application::renderFoundServices()
             service.port
         );
 	}
+}
+
+void 
+mdns::engine::Application::openInBrowser(const std::string& url)
+{
+#ifdef _WIN32
+    HINSTANCE res = ShellExecuteA(
+        nullptr,
+        nullptr,
+        url.c_str(),
+        nullptr,
+        nullptr,
+        SW_SHOWNORMAL
+    );
+
+    if ((INT_PTR)res <= 32) {
+        logger::core()->error("Failed opening link: " + url);
+    }
+#else 
+    std::string cmd = "xdg-open \"" + url + "\"";
+    system(cmd.c_str());
+#endif
 }
 
 void

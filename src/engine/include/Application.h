@@ -30,6 +30,7 @@ private:
     void tryAddService(ScanCardEntry entry);
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
     float calcServiceCardHeight(std::size_t ipCount);
+	void openInBrowser(std::string const& url);
     void renderUI();
     void renderDiscoveryLayout();
     void renderRightSidebarLayout();
