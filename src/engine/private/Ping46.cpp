@@ -11,6 +11,8 @@
 	#include <unistd.h>
 	#include <signal.h>
 	#include <sys/wait.h>
+	#include <fcntl.h>
+	#include <errno.h>
 #endif
 
 static bool extractTimeMs(const std::string& line, int& timeMs)
@@ -103,6 +105,11 @@ mdns::engine::PingTool::resetStats()
 void
 mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& token)
 {
+	logger::net()->info("Will execute command: " + command);
+
+	m_output.clear();
+	m_output += "== Ping tool started == \n";
+
 #ifdef _WIN32
 	SECURITY_ATTRIBUTES sa{};
 	sa.nLength	      = sizeof(sa);
@@ -152,7 +159,6 @@ mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& 
 	DWORD bytesRead = 0;
 	int totalTime   = 0;
 	std::string pending;
-	m_output.clear();
 
 	while (!token.stop_requested()) {
 		if (!ReadFile(readPipe, buffer, sizeof(buffer) - 1, &bytesRead, nullptr) || bytesRead == 0)
@@ -200,6 +206,7 @@ mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& 
 #ifndef _WIN32
 	int pipefd[2];
 	if (pipe(pipefd) != 0) {
+		logger::net()->error("pipe() failed");
 		m_output = "pipe() failed";
 		return;
 	}
@@ -216,35 +223,47 @@ mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& 
 
 	close(pipefd[1]);
 
+	int flags = fcntl(pipefd[0], F_GETFL, 0);
+	fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK);
+
 	char buffer[256];
 	int totalTime = 0;
-	m_output.clear();
 
 	while (!token.stop_requested()) {
 		ssize_t n = read(pipefd[0], buffer, sizeof(buffer) - 1);
-		if (n <= 0) {
-			break;
-		}
 
-		buffer[n] = '\0';
-		std::string line(buffer);
-		m_output += line;
+		if (n > 0) {
+			buffer[n] = '\0';
+			std::string line(buffer);
+			m_output += line;
 
-		if (line.find("bytes from") != std::string::npos || line.find("Destination Host Unreachable") != std::string::npos)
-		{
-			m_stats.send++;
-		}
-
-		if (line.find("bytes from") != std::string::npos) {
-			m_stats.received++;
-
-			int timeMs = 0;
-			if (extractTimeMs(line, timeMs)) {
-				totalTime += timeMs;
-				m_stats.min = std::min(m_stats.min, timeMs);
-				m_stats.max = std::max(m_stats.max, timeMs);
-				pushHistory(m_stats.history, timeMs);
+			if (line.find("bytes from") != std::string::npos ||
+				line.find("Destination Host Unreachable") != std::string::npos) {
+				m_stats.send++;
 			}
+
+			if (line.find("bytes from") != std::string::npos) {
+				m_stats.received++;
+
+				int timeMs = 0;
+				if (extractTimeMs(line, timeMs)) {
+					totalTime += timeMs;
+					m_stats.min = std::min(m_stats.min, timeMs);
+					m_stats.max = std::max(m_stats.max, timeMs);
+					pushHistory(m_stats.history, timeMs);
+				}
+			}
+		}
+		else if (n == -1) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				usleep(10 * 1000);
+				continue;
+			} else {
+				break;
+			}
+		}
+		else {
+			break;
 		}
 	}
 

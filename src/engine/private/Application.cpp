@@ -321,9 +321,9 @@ mdns::engine::Application::renderRightSidebarLayout()
         ImGui::Text("Received: %d", stats.received);
         ImGui::Text("Lost: %d", stats.lost);
         ImGui::NextColumn();
-        ImGui::Text("Min: %.2f ms", stats.min);
-        ImGui::Text("Max: %.2f ms", stats.max);
-        ImGui::Text("Avg: %.2f ms", stats.average);
+        ImGui::Text("Min: %d ms", stats.min == INT_MAX? 0: stats.min);
+        ImGui::Text("Max: %d ms", stats.max);
+        ImGui::Text("Avg: %d ms", stats.average);
         ImGui::Columns(1);
 
         ImGui::Separator();
