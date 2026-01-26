@@ -27,6 +27,7 @@ target_link_libraries(MDNS_Engine
             imgui
             glfw
             OpenGL::GL
+            STB
             MDNS::Logger
             MDNS::Helper
 )
