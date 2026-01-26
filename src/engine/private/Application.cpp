@@ -6,7 +6,11 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 #include <stdexcept>
+
+#define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
+#include <AppIcon.h>
 #include <Logger.h>
 
 #if defined(WIN32)
@@ -45,7 +49,7 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
 
-	m_title  = "mDNS Browser - " + buildInfo;
+	m_title  = "mDNS Scanner - " + buildInfo;
     m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
@@ -62,6 +66,7 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     );
 
     glfwMakeContextCurrent(m_window);
+    loadAppIcon();
     glfwSwapInterval(1);
 
     logger::core()->info("GLFW initialized");
@@ -130,6 +135,21 @@ mdns::engine::Application::setUIScalingFactor(float scalingFactor)
     io.Fonts->Clear();
     io.Fonts->AddFontDefault(&cfg);
     io.Fonts->Build();
+}
+
+void
+mdns::engine::Application::loadAppIcon()
+{
+    int w, h, comp;
+    unsigned char* pixels = stbi_load_from_memory(app_icon, app_icon_len, &w, &h, &comp, 4);
+
+    GLFWimage icon;
+    icon.width  = w;
+    icon.height = h;
+    icon.pixels = pixels;
+
+    glfwSetWindowIcon(m_window, 1, &icon);
+    stbi_image_free(pixels);
 }
 
 void

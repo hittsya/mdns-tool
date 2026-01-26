@@ -27,6 +27,7 @@ public:
     ~Application();
     void run();
 private:
+    void loadAppIcon();
     void tryAddService(ScanCardEntry entry, bool isAdvertized);
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
     float calcServiceCardHeight(std::size_t ipCount);
