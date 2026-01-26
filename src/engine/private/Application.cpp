@@ -314,6 +314,19 @@ mdns::engine::Application::renderUI()
         ImGui::End();
     }
 
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
+
+    ImGui::Indent(10);
+    ImGui::TextUnformatted("Welcome to mDNS Scanner BETA");
+    ImGui::Spacing();
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextUnformatted("Scan your local network for mDNS / Bonjour services");
+    ImGui::PopStyleColor();
+    ImGui::Unindent(10);
+    ImGui::Separator();
+    ImGui::Spacing();
+
+
     renderDiscoveryLayout();
 
     ImGui::End();
@@ -515,8 +528,6 @@ mdns::engine::Application::renderRightSidebarLayout()
 void
 mdns::engine::Application::renderDiscoveryLayout()
 {
-    ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight() / 2));
-
     if (ImGui::CollapsingHeader("Browse mDNS services", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::BeginGroup();
