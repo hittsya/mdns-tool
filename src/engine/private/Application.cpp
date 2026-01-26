@@ -231,6 +231,21 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
                 ImGui::CloseCurrentPopup();
             }
 
+            ImGui::SameLine();
+
+            if (ImGui::Button("Open in browser")) {
+                std::string url = name.find("https") != std::string::npos ? "https" : "http";
+
+                url += "://";
+                url += ipAddr;
+
+                if (port != mdns::proto::port) {
+                    url += ":" + std::to_string(port);
+                }
+
+                openInBrowser(url);
+            }
+
             ImGui::EndPopup();
         }
 
@@ -243,7 +258,6 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::Text("Port:");
     ImGui::SameLine(200);
     ImGui::Text("%d", port);
-
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     if (ImGui::Button("Open in browser")) {
@@ -261,9 +275,9 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
 
     ImGui::SameLine();
 
-    if (ImGui::Button("Advanced data")) {
+    /*if (ImGui::Button("Advanced data")) {
 
-    }
+    }*/
 
     ImGui::EndChild();
     ImGui::Spacing();
@@ -369,11 +383,11 @@ mdns::engine::Application::renderDiscoveryLayout()
         ImGui::BeginGroup();
         ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
 
-        static char searchBuffer[128] = "";
+        /*static char searchBuffer[128] = "";
         ImGui::SetNextItemWidth(250);
-        ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));
+        ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));*/
 
-        ImGui::SameLine();
+        //ImGui::SameLine();
         ImGui::SetNextItemWidth(300);
         
         ImGui::BeginDisabled(m_discovery_running);
