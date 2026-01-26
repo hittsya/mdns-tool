@@ -186,6 +186,10 @@ mdns::engine::Application::renderUI()
 void 
 mdns::engine::Application::renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port)
 {
+    if(name.empty()) {
+        return;
+	}
+
 	auto const height = calcServiceCardHeight(ipAddrs.size());
 
     ImGui::PushID(index);
@@ -256,7 +260,6 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::Spacing();
     ImGui::PopID();
 }
-
 
 void
 mdns::engine::Application::renderFoundServices()
@@ -396,39 +399,66 @@ mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response>&& r
 
     for (std::size_t entry_idx = 0; entry_idx < responses.size(); ++entry_idx) {
         auto const& target_service = responses[entry_idx];
-        entry.ip_addresses = { target_service.ip_addr_str };
+        auto const  advertized     = target_service.advertized_ip_addr_str.size() > 0;
+        
+        entry.ip_addresses = { advertized ? target_service.advertized_ip_addr_str: target_service.ip_addr_str };
         entry.port         = target_service.port;
 
         for (std::size_t answer_idx = 0; answer_idx < target_service.answer_rrs.size(); ++answer_idx) {
 			entry.name = target_service.answer_rrs[answer_idx].rdata_serialized;
-            tryAddService(entry);
+            if (target_service.answer_rrs[answer_idx].port != 0) {
+                entry.port = target_service.answer_rrs[answer_idx].port;
+            }
+
+            tryAddService(entry, advertized);
         }
 
         for (std::size_t answer_idx = 0; answer_idx < target_service.additional_rrs.size(); ++answer_idx) {
             entry.name = target_service.additional_rrs[answer_idx].rdata_serialized;
-            tryAddService(entry);
+            if (target_service.additional_rrs[answer_idx].port != 0) {
+                entry.port = target_service.additional_rrs[answer_idx].port;
+            }
+
+            tryAddService(entry, advertized);
         }
 
         for (std::size_t answer_idx = 0; answer_idx < target_service.authority_rrs.size(); ++answer_idx) {
             entry.name = target_service.authority_rrs[answer_idx].rdata_serialized;
-            tryAddService(entry);
+            if (target_service.authority_rrs[answer_idx].port != 0) {
+                entry.port = target_service.authority_rrs[answer_idx].port;
+            }
+
+            tryAddService(entry, advertized);
         }
 
         for (std::size_t answer_idx = 0; answer_idx < target_service.questions_list.size(); ++answer_idx) {
             entry.name = target_service.questions_list[answer_idx].name;
-            tryAddService(entry);
+            tryAddService(entry, advertized);
         }
     }
 }
 
 void
-mdns::engine::Application::tryAddService(ScanCardEntry entry)
+mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvertized)
 {
     auto serviceIt = std::find(m_discovered_services.begin(), m_discovered_services.end(), entry);
     if (serviceIt == m_discovered_services.end()) {
         m_discovered_services.push_back(std::move(entry));
         return;
 	}
+
+    if (serviceIt->port == mdns::proto::port && serviceIt->port != entry.port) {
+        // Handle case where SRV record with port appeared after all records
+        // TODO: Weight?
+        serviceIt->port = entry.port;
+    }
+
+    if (isAdvertized) {
+        // Handle case where anounced service is also advertizing an address.
+		// We give priority to advertized IPs.
+        serviceIt->ip_addresses = entry.ip_addresses;
+        return;
+    }
 
     auto ipIt = std::find(
         serviceIt->ip_addresses.begin(),

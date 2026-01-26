@@ -4,7 +4,8 @@
 #include "MdnsImpl.hpp"
 
 #if defined(_WIN32)
-    #include <winsock.h>
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
 #else
     #include <arpa/inet.h>
 #endif
@@ -91,17 +92,6 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t
             }
         }
 
-        for (auto& entry: result) {
-            for (auto& answer: entry.answer_rrs)
-                serializeRR(entry, answer);
-
-            for (auto& answer: entry.authority_rrs)
-                serializeRR(entry, answer);
-
-            for (auto& answer: entry.additional_rrs)
-                serializeRR(entry, answer);
-        }
-
         on_service_discovered_(std::move(result));
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -114,47 +104,24 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t
     logger::mdns()->info("Browsing thread stopped");
 }
 
-bool
-mdns::MdnsHelper::serializeRR(proto::mdns_response& res, proto::mdns_rr& rr) {
-    if (rr.type != proto::MDNS_RECORDTYPE_PTR) {
-        return false;
-    }
-
-    if ((rr.clazz & 0x7FFF) != proto::MDNS_CLASS_IN) {
-        return false;
-    }
-
-    const uint8_t* p = rr.rdata.data();
-    std::string target;
-
-    if (!parseName(p, res.packet_start(), res.packet_end(), target) || target.empty()) {
-        target = "Unknown";
-    }
-
-    logger::mdns()->trace(fmt::format("PoinTeR: {} -> {}", rr.name, target));
-    rr.rdata_serialized = target;
-
-    return true;
-}
-
 const std::uint8_t*
-mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start, const std::uint8_t* end, std::string& out) {
+mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start, const std::uint8_t* end, std::string& out)
+{
     out.clear();
 
     const std::uint8_t* cur = ptr;
-    const std::uint8_t* ret = nullptr;
+    const std::uint8_t* next = nullptr;
     int jumpCount = 0;
     bool terminated = false;
 
     while (cur < end)
     {
-        uint8_t len = *cur;
+        std::uint8_t len = *cur;
 
         if ((len & 0xC0) == 0xC0)
         {
-            if (cur + 1 >= end)
-            {
-                logger::mdns()->error("Malformed packet (truncated compression)");
+            if (cur + 1 >= end) {
+                logger::mdns()->error("Malformed packet (truncated compression pointer)");
                 return nullptr;
             }
 
@@ -164,8 +131,8 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
                 return nullptr;
             }
 
-            if (!ret) {
-                ret = cur + 2;
+            if (!next) {
+                next = cur + 2;
             }
 
             cur = start + offset;
@@ -197,31 +164,144 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
         cur += len;
     }
 
-    if (!terminated && !ret) {
+    if (!terminated) {
         logger::mdns()->error("Malformed packet (name not terminated)");
         return nullptr;
     }
-
-    if (!out.empty())
+    
+    if (!out.empty()) {
         out.pop_back();
+    }
 
-    ptr = ret ? ret : cur;
+    ptr = next ? next : cur;
     return ptr;
 }
 
 mdns::proto::mdns_rr
-mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t *start, const std::uint8_t *end) {
-    proto::mdns_rr record;
-    ptr = parseName(ptr, start, end, record.name);
+mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, const std::uint8_t* end, std::string& advertizedIP)
+{
+    proto::mdns_rr record{};
 
+    const auto* name_end = parseName(ptr, start, end, record.name);
+    if (!name_end) {
+        logger::mdns()->error("Malformed RR (bad owner name)");
+        return record;
+    }
+    ptr = name_end;
+
+    if (ptr + 10 > end) {
+        logger::mdns()->error("Malformed RR (truncated header)");
+        return record;
+    }
+
+    record.port  = 0;
     record.type  = readU16(ptr);
     record.clazz = readU16(ptr);
     record.ttl   = readU32(ptr);
 
     std::uint16_t rdlen = readU16(ptr);
-    record.rdata.assign(ptr, ptr + rdlen);
-    ptr += rdlen;
+    if (ptr + rdlen > end) {
+        logger::mdns()->error("Malformed RR (RDATA overrun)");
+        return record;
+    }
 
+    const std::uint8_t* rdata_start = ptr;
+    const std::uint8_t* rdata_end   = ptr + rdlen;
+
+    record.rdata.assign(rdata_start, rdata_end);
+
+    switch (record.type) {
+        case mdns::proto::MDNS_RECORDTYPE_PTR:
+        {
+            const std::uint8_t* tmp = rdata_start;
+            std::string target;
+
+            if (parseName(tmp, start, end, target)) {
+                record.rdata_serialized = target;
+            }
+        } break;
+
+        case mdns::proto::MDNS_RECORDTYPE_TXT:
+        {
+            const std::uint8_t* tmp = rdata_start;
+
+            while (tmp < rdata_end) {
+                std::uint8_t len = *tmp++;
+                if (tmp + len > rdata_end) {
+                    break;
+                }
+
+                std::string txt(reinterpret_cast<const char*>(tmp), len);
+				logger::mdns()->trace("TXT record entry: " + txt);
+                record.rdata_serialized += txt;
+                tmp += len;
+            }
+        } break;
+
+        case mdns::proto::MDNS_RECORDTYPE_SRV:
+        {
+            if (rdlen < 6) {
+                logger::mdns()->error("Malformed SRV record (too short)");
+                break;
+            }
+
+            const std::uint8_t* tmp = rdata_start;
+            std::uint16_t priority  = readU16(tmp);
+            std::uint16_t weight    = readU16(tmp);
+            std::uint16_t port      = readU16(tmp);
+
+            std::string target;
+            if (!parseName(tmp, start, end, target)) {
+                logger::mdns()->error("Malformed SRV record (bad target name)");
+                break;
+            }
+
+            logger::mdns()->trace(fmt::format(
+                "Discovered SRV record: {} -> {}:{} (prio={}, weight={})",
+                record.name, target, port, priority, weight
+            ));
+
+            record.port             = port;
+            record.rdata_serialized = record.name;
+        } break;
+
+        case mdns::proto::MDNS_RECORDTYPE_A:
+        {
+            if (rdlen == 4) {
+                char ip[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, rdata_start, ip, sizeof(ip));
+                advertizedIP = ip;
+                logger::core()->trace("Discovered A record: " + advertizedIP + " / " + record.name);
+                record.rdata_serialized = record.name;
+            }
+        } break;
+
+        case mdns::proto::MDNS_RECORDTYPE_AAAA:
+        {
+            if (rdlen == 16) {
+                char ip[INET6_ADDRSTRLEN];
+                inet_ntop(AF_INET6, rdata_start, ip, sizeof(ip));
+                advertizedIP = ip;
+                logger::core()->trace("Discovered AAAA record: " + advertizedIP + " / " + record.name);
+                record.rdata_serialized = record.name;
+            }
+        } break;
+
+        default: 
+        {
+        } break;
+    }
+
+    logger::mdns()->trace(fmt::format(
+        "Parsed RR: name='{}' type={} class={} ttl={} rdlen={}",
+            record.name,
+            record.type,
+            record.clazz,
+            record.ttl,
+            rdlen
+	));
+
+    ptr = rdata_end;
     return record;
 }
 
@@ -254,6 +334,12 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
 
     proto::mdns_response response{};
     response.packet.assign(packet_start, packet_end);
+
+    if (data + 12 > packet_end) {
+        logger::mdns()->error("Malformed packet (truncated header)");
+        return std::nullopt;
+    }
+
     response.query_id    = readU16(data);
     response.flags       = readU16(data);
     response.questions   = readU16(data);
@@ -262,52 +348,57 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     std::uint16_t const authority_rrs  = readU16(data);
     std::uint16_t const additional_rrs = readU16(data);
 
-    logger::mdns()->trace(fmt::format(
-        "Header: id={} flags=0x{:04X} qd={} an={} ns={} ar={}",
-            response.query_id,
-            response.flags,
-            response.questions,
-            answer_rrs,
-            authority_rrs,
-            additional_rrs
-    ));
+    //logger::mdns()->trace(fmt::format(
+    //    "Header: id={} flags=0x{:04X} qd={} an={} ns={} ar={}",
+    //        response.query_id,
+    //        response.flags,
+    //        response.questions,
+    //        answer_rrs,
+    //        authority_rrs,
+    //        additional_rrs
+    //));
 
     for (std::uint16_t i = 0; i < response.questions; ++i) {
-        proto::mdns_question q;
+        proto::mdns_question q{};
 
-        data = parseName(data, packet_start, packet_end, q.name);
-        if (data + 4 > packet_end) {
-			logger::mdns()->error("Malformed packet (truncated question)");
+        const auto* name_end = parseName(data, packet_start, packet_end, q.name);
+        if (!name_end || name_end + 4 > packet_end) {
+            logger::mdns()->error("Malformed packet (bad question name)");
             return std::nullopt;
         }
 
-        if (q.name == "_services._dns-sd._udp.local") {
-            // We found ourselfs
-            continue;
-        }
-
+        data    = name_end;
         q.type  = readU16(data);
         q.clazz = readU16(data);
 
-        logger::mdns()->info("Pushed anouncment: " + q.name);
-        response.questions_list.push_back(std::move(q));
+        if (q.name != "_services._dns-sd._udp.local") {
+            logger::mdns()->info("Pushed announcement: " + q.name);
+            response.questions_list.push_back(std::move(q));
+        }
     }
 
-    for (std::uint16_t i = 0; i < answer_rrs; ++i) {
-        response.answer_rrs.push_back(parseRR(data, packet_start, packet_end));
-    }
+    auto parse_rr_block = [&](std::vector<proto::mdns_rr>& out, std::uint16_t count, std::string &advertizedIP) -> bool
+        {
+            for (std::uint16_t i = 0; i < count; ++i) {
+                const auto* before = data;
+                out.push_back(parseRR(data, packet_start, packet_end, advertizedIP));
 
-    for (std::uint16_t i = 0; i < authority_rrs; ++i) {
-        response.authority_rrs.push_back(parseRR(data, packet_start, packet_end));
-    }
+                if (data <= before || data > packet_end) {
+                    logger::mdns()->error("Malformed packet (bad RR parse)");
+                    return false;
+                }
+            }
+            return true;
+        };
 
-    for (std::uint16_t i = 0; i < additional_rrs; ++i) {
-        response.additional_rrs.push_back(parseRR(data, packet_start, packet_end));
+    if (!parse_rr_block(response.answer_rrs    , answer_rrs    , response.advertized_ip_addr_str) ||
+        !parse_rr_block(response.authority_rrs , authority_rrs , response.advertized_ip_addr_str) ||
+        !parse_rr_block(response.additional_rrs, additional_rrs, response.advertized_ip_addr_str)) {
+            return std::nullopt;
     }
 
     response.ip_addr_str = message.ip_addr_str;
     response.port        = message.port;
-
     return response;
 }
 

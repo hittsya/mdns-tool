@@ -19,7 +19,7 @@ public:
 
         bool operator==(const ScanCardEntry& other) const noexcept
         {   
-            return name == other.name && port == other.port;
+            return name == other.name;
         }
     };
 
@@ -27,7 +27,7 @@ public:
     ~Application();
     void run();
 private:
-    void tryAddService(ScanCardEntry entry);
+    void tryAddService(ScanCardEntry entry, bool isAdvertized);
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
     float calcServiceCardHeight(std::size_t ipCount);
 	void openInBrowser(std::string const& url);
@@ -45,9 +45,9 @@ private:
     GLFWwindow*                       m_window = nullptr;
 	float                             m_ui_scaling_factor = 1.0f;
     
-    MdnsHelper                        m_mdns_helper;
-	PingTool                          m_ping_tool;
-    bool                              m_open_ping_view = false;
+    MdnsHelper                                   m_mdns_helper;
+	PingTool                                     m_ping_tool;
+    bool                                         m_open_ping_view = false;
 
     std::vector<ScanCardEntry>        m_discovered_services;
 	bool                              m_discovery_running = false;

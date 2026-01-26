@@ -28,6 +28,7 @@ struct mdns_rr {
     std::uint16_t         clazz;
     std::uint32_t         ttl;
     std::vector<uint8_t>  rdata;
+	std::uint16_t         port;
     std::string           rdata_serialized;
 };
 
@@ -43,6 +44,7 @@ struct mdns_response {
     std::vector<uint8_t>       packet;
 
     std::string   ip_addr_str;
+    std::string   advertized_ip_addr_str;
     std::uint16_t port;
 
     const uint8_t* packet_start() const {
