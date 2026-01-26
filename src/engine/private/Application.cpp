@@ -247,7 +247,16 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     if (ImGui::Button("Open in browser")) {
-        openInBrowser("https://" + name);
+        std::string url = name.find("https") != std::string::npos ? "https": "http";
+        
+        url += "://";
+        url += name;
+        
+        if (port != mdns::proto::port) {
+            url += ":" + std::to_string(port);
+        }
+        
+        openInBrowser(url);
     }
 
     ImGui::SameLine();
