@@ -418,45 +418,37 @@ mdns::engine::Application::renderDiscoveryLayout()
 void 
 mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response>&& responses)
 {
-    ScanCardEntry entry;
+    for (auto& response : responses) {
+        const bool advertised = !response.advertized_ip_addr_str.empty();
+        const std::string& ip = advertised ? response.advertized_ip_addr_str : response.ip_addr_str;
 
-    for (std::size_t entry_idx = 0; entry_idx < responses.size(); ++entry_idx) {
-        auto const& target_service = responses[entry_idx];
-        auto const  advertized     = target_service.advertized_ip_addr_str.size() > 0;
-        
-        entry.ip_addresses = { advertized ? target_service.advertized_ip_addr_str: target_service.ip_addr_str };
-        entry.port         = target_service.port;
-
-        for (std::size_t answer_idx = 0; answer_idx < target_service.answer_rrs.size(); ++answer_idx) {
-			entry.name = target_service.answer_rrs[answer_idx].rdata_serialized;
-            if (target_service.answer_rrs[answer_idx].port != 0) {
-                entry.port = target_service.answer_rrs[answer_idx].port;
+        auto process_entry = [&](const std::string& name, uint16_t port) {
+            if (name.empty()) {
+                return;
             }
 
-            tryAddService(entry, advertized);
+            ScanCardEntry entry{};
+            entry.ip_addresses = { ip };
+            entry.port         = port ? port : response.port;
+            entry.name         = name;
+
+            tryAddService(entry, advertised);
+        };
+
+        for (const auto& rr : response.answer_rrs) {
+            process_entry(rr.rdata_serialized, rr.port);
         }
 
-        for (std::size_t answer_idx = 0; answer_idx < target_service.additional_rrs.size(); ++answer_idx) {
-            entry.name = target_service.additional_rrs[answer_idx].rdata_serialized;
-            if (target_service.additional_rrs[answer_idx].port != 0) {
-                entry.port = target_service.additional_rrs[answer_idx].port;
-            }
-
-            tryAddService(entry, advertized);
+        for (const auto& rr : response.additional_rrs) {
+            process_entry(rr.rdata_serialized, rr.port);
         }
 
-        for (std::size_t answer_idx = 0; answer_idx < target_service.authority_rrs.size(); ++answer_idx) {
-            entry.name = target_service.authority_rrs[answer_idx].rdata_serialized;
-            if (target_service.authority_rrs[answer_idx].port != 0) {
-                entry.port = target_service.authority_rrs[answer_idx].port;
-            }
-
-            tryAddService(entry, advertized);
+        for (const auto& rr : response.authority_rrs) {
+            process_entry(rr.rdata_serialized, rr.port);
         }
 
-        for (std::size_t answer_idx = 0; answer_idx < target_service.questions_list.size(); ++answer_idx) {
-            entry.name = target_service.questions_list[answer_idx].name;
-            tryAddService(entry, advertized);
+        for (const auto& q : response.questions_list) {
+            process_entry(q.name, 0);
         }
     }
 }
