@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <MdnsHelper.h>
 #include <Ping46.h>
+#include <imgui.h>
 
 namespace mdns::engine
 {
@@ -26,7 +27,9 @@ public:
     Application(int width, int height, std::string buildInfo);
     ~Application();
     void run();
+    void onWindowResized(int width, int height);
 private:
+    void handleShortcuts();
     void loadAppIcon();
     void tryAddService(ScanCardEntry entry, bool isAdvertized);
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
@@ -38,17 +41,18 @@ private:
     void renderFoundServices();
     void renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port);
     void setUIScalingFactor(float scalingFactor);
-    float getMonitorScalingFactor();
 private:
     int                               m_width;
     int                               m_height;
     std::string                       m_title;
+    
     GLFWwindow*                       m_window = nullptr;
 	float                             m_ui_scaling_factor = 1.0f;
-    
-    MdnsHelper                                   m_mdns_helper;
-	PingTool                                     m_ping_tool;
-    bool                                         m_open_ping_view = false;
+	bool 							  show_help_window = false;
+    MdnsHelper                        m_mdns_helper;
+	PingTool                          m_ping_tool;
+    bool                              m_open_ping_view = false;
+    ImGuiStyle                        m_base_style;
 
     std::vector<ScanCardEntry>        m_discovered_services;
 	bool                              m_discovery_running = false;

@@ -49,19 +49,31 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
 
-	m_title  = "mDNS Scanner - " + buildInfo;
-    m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
+    m_ui_scaling_factor = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+	m_title             = "mDNS Scanner - " + buildInfo;
+    m_window            = glfwCreateWindow(m_width * m_ui_scaling_factor, m_height * m_ui_scaling_factor, m_title.c_str(), nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
         throw std::runtime_error("Failed to create window");
     }
 
     glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+    glfwSetWindowUserPointer(m_window, this);
+
     glfwSetWindowContentScaleCallback(
         m_window,
         [](GLFWwindow*, float xscale, float yscale) {
             ImGuiIO& io = ImGui::GetIO();
             io.FontGlobalScale = xscale;
+        }
+    );
+
+    glfwSetWindowSizeCallback(
+        m_window,
+        [](GLFWwindow* window, int width, int height)
+        {
+            auto* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+            app->onWindowResized(width, height);
         }
     );
 
@@ -75,15 +87,17 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
+    style.ScaleAllSizes(m_ui_scaling_factor);
+    style.FontScaleDpi = m_ui_scaling_factor;
+
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-
-    m_ui_scaling_factor = getMonitorScalingFactor();
-    logger::core()->info("Monitor scaling is " + std::to_string(m_ui_scaling_factor));
-
-    setUIScalingFactor(m_ui_scaling_factor);
     logger::core()->info("ImGUI initialized");
+    m_base_style = ImGui::GetStyle();
 
     m_mdns_helper.connectOnServiceDiscovered(
         [this](std::vector<proto::mdns_response>&& responses) -> void {
@@ -115,26 +129,38 @@ mdns::engine::Application::~Application()
     logger::shutdown();
 }
 
-float 
-mdns::engine::Application::getMonitorScalingFactor()
+void 
+mdns::engine::Application::onWindowResized(int width, int height)
 {
-    float xscale, yscale;
-    glfwGetWindowContentScale(m_window, &xscale, &yscale);
-    return xscale;
+    m_width  = width;
+    m_height = height;
+
+    int fbw, fbh;
+    glfwGetFramebufferSize(m_window, &fbw, &fbh);
+    glViewport(0, 0, fbw, fbh);
 }
 
 void 
-mdns::engine::Application::setUIScalingFactor(float scalingFactor)
+mdns::engine::Application::setUIScalingFactor(float newFactor)
 {
-    ImFontConfig cfg;
-    cfg.SizePixels = 13.0f * scalingFactor;
+    newFactor = std::clamp(newFactor, 0.75f, 2.0f);
+    if (std::abs(newFactor - m_ui_scaling_factor) < 0.001f) {
+        return;
+    }
 
     ImGuiIO& io = ImGui::GetIO();
-    ImGui::GetStyle().ScaleAllSizes(scalingFactor);
+    ImGui::GetStyle() = m_base_style;
+    ImGui::GetStyle().ScaleAllSizes(newFactor);
+    ImGui::GetStyle().FontScaleDpi = newFactor;
 
+    /*ImFontConfig cfg{};
+    cfg.SizePixels = 13.0f * newFactor;
     io.Fonts->Clear();
     io.Fonts->AddFontDefault(&cfg);
-    io.Fonts->Build();
+    io.Fonts->Build();*/
+
+    m_ui_scaling_factor = newFactor;
+    logger::ui()->info("Set UI scaling factor to " + std::to_string(newFactor));
 }
 
 void
@@ -153,6 +179,23 @@ mdns::engine::Application::loadAppIcon()
 }
 
 void
+mdns::engine::Application::handleShortcuts()
+{
+    ImGuiIO& io = ImGui::GetIO();
+
+    if (io.KeyCtrl)
+    {
+        if (ImGui::IsKeyPressed(ImGuiKey_Equal)) {
+            setUIScalingFactor(m_ui_scaling_factor + .25f);
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
+            setUIScalingFactor(m_ui_scaling_factor - .25f);
+        }
+    }
+}
+
+void
 mdns::engine::Application::run()
 {
     while (!glfwWindowShouldClose(m_window))
@@ -163,12 +206,11 @@ mdns::engine::Application::run()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+        handleShortcuts();
         renderUI();
+
         ImGui::Render();
 
-        int w, h;
-        glfwGetFramebufferSize(m_window, &w, &h);
-        glViewport  (0, 0, w, h);
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear     (GL_COLOR_BUFFER_BIT);
 
@@ -194,9 +236,83 @@ mdns::engine::Application::renderUI()
         ImGuiWindowFlags_NoBringToFrontOnFocus |
         ImGuiWindowFlags_NoNavFocus;
 
+
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding  , 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::Begin       ("##FullscreenRoot", nullptr, windowFlags);
+
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("View"))
+        {
+            if (ImGui::MenuItem("Zoom In", "Ctrl +")) {
+                setUIScalingFactor(0.1f);
+            }
+
+            if (ImGui::MenuItem("Zoom Out", "Ctrl -")) {
+                setUIScalingFactor(-0.1f);
+            }
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Help"))
+        {
+            if (ImGui::MenuItem("Open Help")) {
+                show_help_window = true;
+            }
+
+            if (ImGui::MenuItem("GitHub repo")) {
+                openInBrowser("https://github.com/hittsya/mdns-tool");
+            }
+
+            ImGui::EndMenu();
+        }
+
+        ImGui::EndMainMenuBar();
+    }
+
+    if (show_help_window)
+    {
+        ImGui::Begin("Help", &show_help_window, ImGuiWindowFlags_AlwaysAutoResize);
+
+        auto center_text = [](const char* text) {
+            float window_width = ImGui::GetWindowSize().x;
+            float text_width   = ImGui::CalcTextSize(text).x;
+            ImGui::SetCursorPosX((window_width - text_width) * 0.5f);
+            ImGui::TextUnformatted(text);
+        };
+
+        ImGui::Spacing();
+        center_text(m_title.c_str());
+        ImGui::Separator();
+
+        ImGui::Spacing();
+        center_text("Author: Daniel Manoylo");
+
+        ImGui::Spacing();
+        center_text("Special thanks: Maxim Samborsky");
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        const char* github_url = "https://github.com/hittsya/mdns-tool";
+        center_text("Source code:");
+        ImGui::Spacing();
+
+        float link_width = ImGui::CalcTextSize(github_url).x;
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x - link_width) * 0.5f);
+
+        if (ImGui::Selectable(github_url, false)) {
+            ImGui::SetClipboardText(github_url);
+        }
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("(click to copy link)");
+
+        ImGui::End();
+    }
 
     renderDiscoveryLayout();
 
@@ -227,13 +343,13 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     ImGui::Text("Hostname:");
-    ImGui::SameLine(200);
+    ImGui::SameLine(250);
     ImGui::Text("%s", name.c_str());
 
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
     ImGui::Text("IP Address(es):");
-    ImGui::SameLine(200);
-    ImGui::Indent(190);
+    ImGui::SameLine(250);
+    ImGui::Indent(235);
 
     for (auto const& ipAddr: ipAddrs) {
         ImGui::PushID(ipAddr.c_str());
@@ -273,11 +389,11 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
         ImGui::PopID();
     }
 
-    ImGui::Unindent(190);
+    ImGui::Unindent(235);
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
 
     ImGui::Text("Port:");
-    ImGui::SameLine(200);
+    ImGui::SameLine(250);
     ImGui::Text("%d", port);
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
@@ -399,6 +515,8 @@ mdns::engine::Application::renderRightSidebarLayout()
 void
 mdns::engine::Application::renderDiscoveryLayout()
 {
+    ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight() / 2));
+
     if (ImGui::CollapsingHeader("Browse mDNS services", ImGuiTreeNodeFlags_DefaultOpen))
     {
         ImGui::BeginGroup();
