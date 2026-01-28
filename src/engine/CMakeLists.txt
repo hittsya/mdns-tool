@@ -1,4 +1,5 @@
-add_library(MDNS_Engine)
+add_library(MDNS_Engine
+    include/ChangeLog.h)
 
 target_sources(MDNS_Engine
         PUBLIC

@@ -12,6 +12,7 @@
 
 #include <AppIcon.h>
 #include <Logger.h>
+#include <ChangeLog.h>
 
 #if defined(WIN32)
     #include "windows.h"
@@ -259,7 +260,18 @@ mdns::engine::Application::renderUI()
             ImGui::EndMenu();
         }
 
+        if (ImGui::MenuItem("Changelog")) {
+            m_show_changelog_window = true;
+        }
+
         ImGui::EndMainMenuBar();
+    }
+
+    if (m_show_changelog_window)
+    {
+        ImGui::Begin("Changelog", &m_show_changelog_window, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Text(meta::CHANGELOG);
+        ImGui::End();
     }
 
     if (show_help_window)

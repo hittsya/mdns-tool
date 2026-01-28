@@ -61,11 +61,12 @@ private:
     std::string                       m_title;
     
     GLFWwindow*                       m_window = nullptr;
-	bool 							  show_help_window = false;
     MdnsHelper                        m_mdns_helper;
 	PingTool                          m_ping_tool;
     ImGuiStyle                        m_base_style;
 
+    bool 							  show_help_window = false;
+    bool 							  m_show_changelog_window = false;
     bool                              m_open_ping_view = false;
     bool                              m_discovery_running = false;
 
