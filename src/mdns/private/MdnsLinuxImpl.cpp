@@ -244,14 +244,23 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
                 continue;
             }
 
-            auto const sock = initalizeIpv4Socket(curr_if, sockaddr, port);
+            auto sock = initalizeIpv4Socket(curr_if, sockaddr, 0);
             if (sock < 0) {
                 logger::mdns()->warn("Skipping IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
                 continue;
             }
 
             logger::mdns()->trace("Init IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
-            result.push_back(sock);
+            result.push_back(std::move(sock));
+
+            sock = initalizeIpv4Socket(curr_if, sockaddr, proto::port);
+            if (sock < 0) {
+                logger::mdns()->warn("Skipping IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+                continue;
+            }
+
+            logger::mdns()->trace("Init IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+            result.push_back(std::move(sock));
         }
 
         if (curr_if->ifa_addr->sa_family == AF_INET6) {
@@ -261,7 +270,16 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
                 continue;
             }
 
-            auto const sock = initalizeIpv6Socket(curr_if, sockaddr, port);
+            auto sock = initalizeIpv6Socket(curr_if, sockaddr, proto::port);
+            if (sock < 0) {
+                logger::mdns()->warn("Skipping IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
+                continue;
+            }
+
+            logger::mdns()->trace("Init IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in6)));
+            result.push_back(sock);
+
+            sock = initalizeIpv6Socket(curr_if, sockaddr, 0);
             if (sock < 0) {
                 logger::mdns()->warn("Skipping IPv6 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
                 continue;

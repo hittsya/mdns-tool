@@ -68,11 +68,9 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t
         auto now = std::chrono::steady_clock::now();
         
         if (now - last_query_time >= query_interval) {
-            logger::mdns()->info("Sending DNS-SD discovery");
-
             for (auto const socket: sockets) {
-                // TODO: Remove from list?
-                impl_->send_multicast(socket, proto::mdns_services_query, sizeof(proto::mdns_services_query));
+                logger::mdns()->info("Sending discovery query: socket FD: " + std::to_string(socket));
+                impl_->send_multicast(socket, proto::mdns_multi_query, sizeof(proto::mdns_multi_query));
             }
 
             last_query_time = now;
@@ -348,15 +346,15 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     std::uint16_t const authority_rrs  = readU16(data);
     std::uint16_t const additional_rrs = readU16(data);
 
-    //logger::mdns()->trace(fmt::format(
-    //    "Header: id={} flags=0x{:04X} qd={} an={} ns={} ar={}",
-    //        response.query_id,
-    //        response.flags,
-    //        response.questions,
-    //        answer_rrs,
-    //        authority_rrs,
-    //        additional_rrs
-    //));
+    logger::mdns()->trace(fmt::format(
+       "Header: id={} flags=0x{:04X} qd={} an={} ns={} ar={}",
+           response.query_id,
+           response.flags,
+           response.questions,
+           answer_rrs,
+           authority_rrs,
+           additional_rrs
+    ));
 
     for (std::uint16_t i = 0; i < response.questions; ++i) {
         proto::mdns_question q{};
@@ -371,34 +369,59 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
         q.type  = readU16(data);
         q.clazz = readU16(data);
 
-        if (q.name != "_services._dns-sd._udp.local") {
-            logger::mdns()->info("Pushed announcement: " + q.name);
-            response.questions_list.push_back(std::move(q));
+        logger::mdns()->info("Pushed question query: " + q.name);
+        response.questions_list.push_back(std::move(q));
+    }
+
+    auto is_noisy_mdns_ptr = [&](const proto::mdns_rr& rr) -> bool {
+        if (rr.type != proto::MDNS_RECORDTYPE_PTR) {
+            return false;
         }
-    }
 
-    auto parse_rr_block = [&](std::vector<proto::mdns_rr>& out, std::uint16_t count, std::string &advertizedIP) -> bool
-        {
-            for (std::uint16_t i = 0; i < count; ++i) {
-                const auto* before = data;
-                out.push_back(parseRR(data, packet_start, packet_end, advertizedIP));
-
-                if (data <= before || data > packet_end) {
-                    logger::mdns()->error("Malformed packet (bad RR parse)");
-                    return false;
-                }
-            }
+        if (rr.name == "_services._dns-sd._udp.local") {
             return true;
-        };
+        }
 
-    if (!parse_rr_block(response.answer_rrs    , answer_rrs    , response.advertized_ip_addr_str) ||
-        !parse_rr_block(response.authority_rrs , authority_rrs , response.advertized_ip_addr_str) ||
-        !parse_rr_block(response.additional_rrs, additional_rrs, response.advertized_ip_addr_str)) {
-            return std::nullopt;
-    }
+        if (rr.name == "_http._tcp.local") {
+            return true;
+        }
+
+        if (rr.name.size() > 6 && rr.name[0] == '_' && rr.name.find("._udp.local") != std::string::npos) {
+            return true;
+        }
+
+        return false;
+    };
+
+    auto parse_rr_block = [&](std::vector<proto::mdns_rr>& out, std::uint16_t count, std::string &advertizedIP) -> void {
+        for (std::uint16_t i = 0; i < count; ++i) {
+            const auto* before = data;
+
+            auto rr = parseRR(data, packet_start, packet_end, advertizedIP);
+            if (is_noisy_mdns_ptr(rr)) {
+                // TODO: Cache this RR name to db to later query by it
+                logger::mdns()->info("Skipping noisy PTR: " + rr.name);
+                continue;
+            }
+
+            if (data <= before || data > packet_end) {
+                logger::mdns()->error("Malformed packet (bad RR parse)");
+                continue;
+            }
+
+            out.push_back(std::move(rr));
+        }
+
+        return;
+    };
+
+    parse_rr_block(response.answer_rrs    , answer_rrs    , response.advertized_ip_addr_str);
+    parse_rr_block(response.authority_rrs , authority_rrs , response.advertized_ip_addr_str);
+    parse_rr_block(response.additional_rrs, additional_rrs, response.advertized_ip_addr_str);
 
     response.ip_addr_str = message.ip_addr_str;
     response.port        = message.port;
+
     return response;
 }
 

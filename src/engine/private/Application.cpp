@@ -676,7 +676,7 @@ mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response>&& r
 
             auto serviceIt = std::find(m_intercepted_questions.begin(), m_intercepted_questions.end(), entry);
             if (serviceIt == m_intercepted_questions.end()) {
-                m_intercepted_questions.push_back(std::move(entry));
+                m_intercepted_questions.insert(m_intercepted_questions.begin(), std::move(entry));
                 return;
             }
         }

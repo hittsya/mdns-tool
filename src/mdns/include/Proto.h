@@ -79,23 +79,45 @@ enum mdns_entry_type {
 
 enum mdns_class { MDNS_CLASS_IN = 1 };
 
-static constexpr uint8_t mdns_services_query[] = {
-    // Query ID
+static constexpr uint8_t mdns_multi_query[] = {
+    // Transaction ID
     0x00, 0x00,
-    // Flags
+
+    // Flags (standard query)
     0x00, 0x00,
-    // 1 question
-    0x00, 0x01,
-    // No answer, authority or additional RRs
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    // _services._dns-sd._udp.local.
-    0x09, '_', 's', 'e', 'r', 'v', 'i', 'c', 'e', 's', 0x07, '_', 'd', 'n', 's', '-', 's', 'd',
-    0x04, '_', 'u', 'd', 'p', 0x05, 'l', 'o', 'c', 'a', 'l', 0x00,
-    // PTR record
+
+    // QDCOUNT = 2 questions
+    0x00, 0x02,
+
+    // ANCOUNT, NSCOUNT, ARCOUNT = 0
+    0x00, 0x00,
+    0x00, 0x00,
+    0x00, 0x00,
+
+    // Question 1: _services._dns-sd._udp.local.
+    0x09, '_','s','e','r','v','i','c','e','s',
+    0x07, '_','d','n','s','-','s','d',
+    0x04, '_','u','d','p',
+    0x05, 'l','o','c','a','l',
+    0x00,
+
+    // QTYPE = PTR
     0x00, MDNS_RECORDTYPE_PTR,
-    // QU (unicast response) and class IN
+    // QCLASS = QU | IN
+    0x80, MDNS_CLASS_IN,
+
+    // Question 2: _http._tcp.local.
+    0x05, '_','h','t','t','p',
+    0x04, '_','t','c','p',
+    0x05, 'l','o','c','a','l',
+    0x00,
+
+    // QTYPE = PTR
+    0x00, MDNS_RECORDTYPE_PTR,
+    // QCLASS = QU | IN
     0x80, MDNS_CLASS_IN
 };
+
 
 }
 
