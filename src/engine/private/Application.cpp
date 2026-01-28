@@ -333,6 +333,53 @@ mdns::engine::Application::renderUI()
     ImGui::PopStyleVar(2);
 }
 
+void
+mdns::engine::Application::renderQuestionCard(int index, std::string const& name, std::string ipAddrs)
+{
+    if(name.empty()) {
+        return;
+    }
+
+    ImGuiStyle const& style = ImGui::GetStyle();
+    ImGuiIO const& io       = ImGui::GetIO();
+    float height = ImGui::GetTextLineHeight() + ImGui::GetFrameHeight() + style.FramePadding.y + 1.0f;
+
+    ImGui::PushID(index);
+    ImGui::BeginChild("QuestionCard", ImVec2(0, height ), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+
+    float windowWidth = ImGui::GetContentRegionAvail().x;
+    float textWidth   = ImGui::CalcTextSize(name.c_str()).x;
+
+    ImGui::SetWindowFontScale(1.0f);
+    ImGui::PopStyleVar();
+
+    ImGui::Dummy(ImVec2(0.0f, 0.5f));
+
+    ImGui::Text("Who has");
+    ImGui::SameLine();
+
+    // TODO: Bold text
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
+
+    draw->AddText(pos, col, name.c_str());
+    draw->AddText(ImVec2(pos.x + 1, pos.y), col, name.c_str());
+
+    ImGui::Dummy(ImGui::CalcTextSize(name.c_str()));
+
+    ImGui::SameLine();
+    ImGui::Text("? -- via %s", ipAddrs.c_str());
+
+    ImGui::Dummy(ImVec2(0.0f, 1.0f));
+
+    ImGui::EndChild();
+    ImGui::Spacing();
+    ImGui::PopID();
+}
+
+
 void 
 mdns::engine::Application::renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port)
 {
@@ -434,19 +481,6 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::PopID();
 }
 
-void
-mdns::engine::Application::renderFoundServices()
-{
-    for (auto const& service: m_discovered_services) {
-        renderServiceCard(
-            static_cast<int>(&service - &m_discovered_services[0]),
-            service.name,
-            service.ip_addresses,
-            service.port
-        );
-	}
-}
-
 void 
 mdns::engine::Application::openInBrowser(const std::string& url)
 {
@@ -528,41 +562,78 @@ mdns::engine::Application::renderRightSidebarLayout()
 void
 mdns::engine::Application::renderDiscoveryLayout()
 {
-    if (ImGui::CollapsingHeader("Browse mDNS services", ImGuiTreeNodeFlags_DefaultOpen))
-    {
-        ImGui::BeginGroup();
-        ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
 
-        /*static char searchBuffer[128] = "";
+    /*static char searchBuffer[128] = "";
         ImGui::SetNextItemWidth(250);
         ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));*/
+    //ImGui::SameLine
+    ImGui::SetNextItemWidth(300);
 
-        //ImGui::SameLine();
-        ImGui::SetNextItemWidth(300);
-        
-        ImGui::BeginDisabled(m_discovery_running);
-        if (ImGui::Button("Browse")) {
-            m_mdns_helper.startBrowse();
-        }
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(300);
-
-        ImGui::BeginDisabled(!m_discovery_running);
-        if (ImGui::Button("Stop")) {
-            m_mdns_helper.stopBrowse();
-        }
-        ImGui::EndDisabled();
-
-        renderFoundServices();
-
-        ImGui::EndChild();
-
-        renderRightSidebarLayout();
-
-        ImGui::EndGroup();
+    ImGui::BeginDisabled(m_discovery_running);
+    if (ImGui::Button("Browse")) {
+        m_mdns_helper.startBrowse();
     }
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(300);
+
+    ImGui::BeginDisabled(!m_discovery_running);
+    if (ImGui::Button("Stop")) {
+        m_mdns_helper.stopBrowse();
+    }
+    ImGui::EndDisabled();
+    ImGui::Dummy(ImVec2(0.0f, 0.25f));
+
+    ImGui::BeginGroup();
+    ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
+
+    if (ImGui::CollapsingHeader("Browse mDNS services")) {
+        ImGui::Dummy(ImVec2(0.0f, 0.25f));
+        ImGui::Indent(10);
+        ImGui::TextUnformatted("Discovered services");
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextUnformatted("Services that anounced themselfs");
+        ImGui::PopStyleColor();
+        ImGui::Unindent(10);
+        ImGui::Spacing();
+        ImGui::Dummy(ImVec2(0.0f, 0.25f));
+
+        for (auto const& service: m_discovered_services) {
+            renderServiceCard(
+                static_cast<int>(&service - &m_discovered_services[0]),
+                service.name,
+                service.ip_addresses,
+                service.port
+            );
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Intercepted questions")) {
+        ImGui::Dummy(ImVec2(0.0f, 0.25f));
+        ImGui::Indent(10);
+        ImGui::TextUnformatted("Intercepted mDNS questions");
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        ImGui::TextUnformatted("This questions are used to trigger service anouncement");
+        ImGui::PopStyleColor();
+        ImGui::Unindent(10);
+        ImGui::Spacing();
+        ImGui::Dummy(ImVec2(0.0f, 0.25f));
+
+        for (auto const& question: m_intercepted_questions) {
+            renderQuestionCard(
+                static_cast<int>(&question - &m_intercepted_questions[0]),
+                question.name,
+                question.ip_addresses[0]
+            );
+        }
+    }
+
+    ImGui::EndChild();
+    renderRightSidebarLayout();
+    ImGui::EndGroup();
 }
 
 void 
@@ -598,7 +669,15 @@ mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response>&& r
         }
 
         for (const auto& q : response.questions_list) {
-            process_entry(q.name, 0);
+            QuestionCardEntry entry{};
+            entry.ip_addresses = { ip };
+            entry.name         = q.name;
+
+            auto serviceIt = std::find(m_intercepted_questions.begin(), m_intercepted_questions.end(), entry);
+            if (serviceIt == m_intercepted_questions.end()) {
+                m_intercepted_questions.push_back(std::move(entry));
+                return;
+            }
         }
     }
 }

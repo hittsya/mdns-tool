@@ -12,15 +12,28 @@ namespace mdns::engine
 class Application
 {   
 public:
-    struct ScanCardEntry
+    struct CardEntry
     {
         std::string              name;
         std::vector<std::string> ip_addresses;
-		std::uint16_t            port;
+        std::uint16_t            port;
+    };
 
+    struct ScanCardEntry: public CardEntry
+    {
+        // Services are unique only by their name
         bool operator==(const ScanCardEntry& other) const noexcept
         {   
             return name == other.name;
+        }
+    };
+
+    struct QuestionCardEntry: public CardEntry
+    {
+        // Questions are unqiue by their source and name
+        bool operator==(const QuestionCardEntry& other) const noexcept
+        {
+            return name == other.name && ip_addresses[0] == other.ip_addresses[0];
         }
     };
 
@@ -38,8 +51,8 @@ private:
     void renderUI();
     void renderDiscoveryLayout();
     void renderRightSidebarLayout();
-    void renderFoundServices();
     void renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port);
+    void renderQuestionCard(int index, std::string const& name, std::string ipAddrs);
     void setUIScalingFactor(float scalingFactor);
 private:
     int                               m_width;
@@ -55,6 +68,8 @@ private:
     ImGuiStyle                        m_base_style;
 
     std::vector<ScanCardEntry>        m_discovered_services;
+    std::vector<QuestionCardEntry>    m_intercepted_questions;
+
 	bool                              m_discovery_running = false;
 };
 
