@@ -144,18 +144,28 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
 
             if (sa->sa_family == AF_INET) {
                 auto* addr = (sockaddr_in*)sa;
-                auto sock  = initIpv4Socket(addr, port);
                 
+                auto sock  = initIpv4Socket(addr, 0);
                 if (sock != INVALID_SOCKET) {
-                    result.push_back(sock);
+                    result.push_back(std::move(sock));
+                }
+
+                sock = initIpv4Socket(addr, proto::port);
+                if (sock != INVALID_SOCKET) {
+                    result.push_back(std::move(sock));
                 }
             }
             else if (sa->sa_family == AF_INET6) {
                 auto* addr = (sockaddr_in6*)sa;
-                auto sock  = initIpv6Socket(addr, a->Ipv6IfIndex, port);
 
+                auto sock = initIpv6Socket(addr, a->Ipv6IfIndex, 0);
                 if (sock != INVALID_SOCKET) {
-                    result.push_back(sock);
+                    result.push_back(std::move(sock));
+                }
+
+                sock = initIpv6Socket(addr, a->Ipv6IfIndex, proto::port);
+                if (sock != INVALID_SOCKET) {
+                    result.push_back(std::move(sock));
                 }
             }
         }
