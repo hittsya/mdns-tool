@@ -30,6 +30,7 @@ target_link_libraries(MDNS_Engine
             STB
             MDNS::Logger
             MDNS::Helper
+            MDNS::Settings
 )
 
 add_library(MDNS::Engine ALIAS MDNS_Engine)

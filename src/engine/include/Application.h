@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <MdnsHelper.h>
 #include <Ping46.h>
+#include <Settings.h>
 #include <imgui.h>
 
 namespace mdns::engine
@@ -60,17 +61,18 @@ private:
     std::string                       m_title;
     
     GLFWwindow*                       m_window = nullptr;
-	float                             m_ui_scaling_factor = 1.0f;
 	bool 							  show_help_window = false;
     MdnsHelper                        m_mdns_helper;
 	PingTool                          m_ping_tool;
-    bool                              m_open_ping_view = false;
     ImGuiStyle                        m_base_style;
+
+    bool                              m_open_ping_view = false;
+    bool                              m_discovery_running = false;
 
     std::vector<ScanCardEntry>        m_discovered_services;
     std::vector<QuestionCardEntry>    m_intercepted_questions;
 
-	bool                              m_discovery_running = false;
+    std::unique_ptr<meta::Settings>   m_settings;
 };
 
 }

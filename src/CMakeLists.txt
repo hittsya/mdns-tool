@@ -1,14 +1,15 @@
 add_executable(
     mdns_listener
     main.cpp
- "stb/include/stb_image.h")
+)
 
 add_subdirectory(logger)
+add_subdirectory(settings)
 add_subdirectory(mdns)
 add_subdirectory(stb)
 add_subdirectory(engine)
 
-target_link_libraries(mdns_listener PRIVATE MDNS::Engine)
+target_link_libraries  (mdns_listener PRIVATE MDNS::Engine)
 target_compile_features(mdns_listener PRIVATE cxx_std_20)
 
 if (WIN32)

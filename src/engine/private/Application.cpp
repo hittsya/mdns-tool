@@ -49,9 +49,9 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
 
-    m_ui_scaling_factor = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+    float scale         = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
 	m_title             = "mDNS Scanner - " + buildInfo;
-    m_window            = glfwCreateWindow(m_width * m_ui_scaling_factor, m_height * m_ui_scaling_factor, m_title.c_str(), nullptr, nullptr);
+    m_window            = glfwCreateWindow(m_width * scale, m_height * scale, m_title.c_str(), nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
         throw std::runtime_error("Failed to create window");
@@ -87,17 +87,15 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
-
-    ImGuiStyle& style = ImGui::GetStyle();
-    // Bake a fixed style scale. (until we have a solution for dynamic style scaling, changing this requires resetting Style + calling this again)
-    style.ScaleAllSizes(m_ui_scaling_factor);
-    style.FontScaleDpi = m_ui_scaling_factor;
-
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
-
-    logger::core()->info("ImGUI initialized");
     m_base_style = ImGui::GetStyle();
+    logger::core()->info("ImGUI initialized");
+
+    m_settings = std::unique_ptr<meta::Settings>(new meta::Settings());
+    logger::core()->info("Settings initialized");
+
+    setUIScalingFactor(m_settings->getSettings().ui_scale_factor);
 
     m_mdns_helper.connectOnServiceDiscovered(
         [this](std::vector<proto::mdns_response>&& responses) -> void {
@@ -144,23 +142,15 @@ void
 mdns::engine::Application::setUIScalingFactor(float newFactor)
 {
     newFactor = std::clamp(newFactor, 0.75f, 2.0f);
-    if (std::abs(newFactor - m_ui_scaling_factor) < 0.001f) {
-        return;
-    }
 
     ImGuiIO& io = ImGui::GetIO();
     ImGui::GetStyle() = m_base_style;
     ImGui::GetStyle().ScaleAllSizes(newFactor);
     ImGui::GetStyle().FontScaleDpi = newFactor;
 
-    /*ImFontConfig cfg{};
-    cfg.SizePixels = 13.0f * newFactor;
-    io.Fonts->Clear();
-    io.Fonts->AddFontDefault(&cfg);
-    io.Fonts->Build();*/
-
-    m_ui_scaling_factor = newFactor;
     logger::ui()->info("Set UI scaling factor to " + std::to_string(newFactor));
+    m_settings->getSettings().ui_scale_factor = newFactor;
+    m_settings->saveSettings();
 }
 
 void
@@ -183,14 +173,14 @@ mdns::engine::Application::handleShortcuts()
 {
     ImGuiIO& io = ImGui::GetIO();
 
-    if (io.KeyCtrl)
-    {
+    meta::Settings::AppSettings& settings = m_settings->getSettings();
+    if (io.KeyCtrl) {
         if (ImGui::IsKeyPressed(ImGuiKey_Equal)) {
-            setUIScalingFactor(m_ui_scaling_factor + .25f);
+            setUIScalingFactor(settings.ui_scale_factor + .25f);
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
-            setUIScalingFactor(m_ui_scaling_factor - .25f);
+            setUIScalingFactor(settings.ui_scale_factor - .25f);
         }
     }
 }
@@ -562,7 +552,6 @@ mdns::engine::Application::renderRightSidebarLayout()
 void
 mdns::engine::Application::renderDiscoveryLayout()
 {
-
     /*static char searchBuffer[128] = "";
         ImGui::SetNextItemWidth(250);
         ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));*/
