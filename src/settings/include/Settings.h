@@ -3,6 +3,7 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <optional>
 
 namespace mdns::meta
 {
@@ -12,7 +13,9 @@ class Settings
 public:
     struct AppSettings
     {
-        float ui_scale_factor = 1.0f;
+        std::optional<float> ui_scale_factor;
+        std::optional<int>   window_width;
+        std::optional<int>   window_height;
     };
 
     Settings();

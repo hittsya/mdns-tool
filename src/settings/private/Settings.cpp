@@ -13,7 +13,21 @@ mdns::meta::Settings::Settings()
 
     m_handler.ReadLineFn = [](ImGuiContext*, ImGuiSettingsHandler*, void* entry, const char* line) {
         auto* s = static_cast<AppSettings*>(entry);
-        std::sscanf(line, "UIScaleFactor=%f", &s->ui_scale_factor);
+
+        int tmpI;
+        float tmpF;
+
+        if (std::sscanf(line, "UIScaleFactor=%f", &tmpF) == 1) {
+            s->ui_scale_factor = tmpF;
+        }
+
+        if (std::sscanf(line, "WindowWidth=%d", &tmpI) == 1) {
+            s->window_width = tmpI;
+        }
+
+        if (std::sscanf(line, "WindowHeight=%d", &tmpI) == 1) {
+            s->window_height = tmpI;
+        }
     };
 
     m_handler.WriteAllFn = [](ImGuiContext*, ImGuiSettingsHandler* h, ImGuiTextBuffer* buf)
@@ -21,7 +35,9 @@ mdns::meta::Settings::Settings()
         auto* self = static_cast<Settings*>(h->UserData);
 
         buf->appendf("[AppSettings][Main]\n");
-        buf->appendf("UIScaleFactor=%f\n", self->m_settings.ui_scale_factor);
+        buf->appendf("UIScaleFactor=%f\n", self->m_settings.ui_scale_factor.value_or(1.0f));
+        buf->appendf("WindowWidth=%d\n", self->m_settings.window_width.value_or(1200));
+        buf->appendf("WindowHeight=%d\n", self->m_settings.window_height.value_or(920));
         buf->append ("\n");
     };
 
@@ -31,14 +47,12 @@ mdns::meta::Settings::Settings()
 
 mdns::meta::Settings::~Settings()
 {
-    saveSettings();
 }
 
 void
 mdns::meta::Settings::saveSettings()
 {
     logger::core()->info("Saving settings");
-    ImGui::SaveIniSettingsToMemory();
     ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
 }
 

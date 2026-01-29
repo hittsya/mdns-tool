@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
+#include <memory>
 #include <stdexcept>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -49,10 +50,23 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
 #if defined(WIN32)
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 #endif
+    logger::core()->info("GLFW initialized");
 
-    float scale         = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
-	m_title             = "mDNS Scanner - " + buildInfo;
-    m_window            = glfwCreateWindow(m_width * scale, m_height * scale, m_title.c_str(), nullptr, nullptr);
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+
+    m_settings = std::make_unique<meta::Settings>();
+    logger::core()->info("Settings initialized");
+
+    float scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+    auto& settings = m_settings->getSettings();
+
+    m_width  = settings.window_width.value_or(static_cast<int>(m_width * scale));
+    m_height = settings.window_height.value_or(static_cast<int>(m_height * scale));
+
+    m_title  = "mDNS Scanner - " + buildInfo;
+    m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
         throw std::runtime_error("Failed to create window");
@@ -81,22 +95,14 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     glfwMakeContextCurrent(m_window);
     loadAppIcon();
     glfwSwapInterval(1);
-
-    logger::core()->info("GLFW initialized");
-
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
+    logger::core()->info("Root window initialized");
 
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
     m_base_style = ImGui::GetStyle();
     logger::core()->info("ImGUI initialized");
 
-    m_settings = std::unique_ptr<meta::Settings>(new meta::Settings());
-    logger::core()->info("Settings initialized");
-
-    setUIScalingFactor(m_settings->getSettings().ui_scale_factor);
+    setUIScalingFactor(m_settings->getSettings().ui_scale_factor.value_or(1.0f));
 
     m_mdns_helper.connectOnServiceDiscovered(
         [this](std::vector<proto::mdns_response>&& responses) -> void {
@@ -113,6 +119,8 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
 
 mdns::engine::Application::~Application()
 {
+    m_settings->saveSettings();
+
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -137,6 +145,10 @@ mdns::engine::Application::onWindowResized(int width, int height)
     int fbw, fbh;
     glfwGetFramebufferSize(m_window, &fbw, &fbh);
     glViewport(0, 0, fbw, fbh);
+
+    auto& settings = m_settings->getSettings();
+    settings.window_height = height;
+    settings.window_width  = width;
 }
 
 void 
@@ -151,7 +163,6 @@ mdns::engine::Application::setUIScalingFactor(float newFactor)
 
     logger::ui()->info("Set UI scaling factor to " + std::to_string(newFactor));
     m_settings->getSettings().ui_scale_factor = newFactor;
-    m_settings->saveSettings();
 }
 
 void
@@ -177,11 +188,13 @@ mdns::engine::Application::handleShortcuts()
     meta::Settings::AppSettings& settings = m_settings->getSettings();
     if (io.KeyCtrl) {
         if (ImGui::IsKeyPressed(ImGuiKey_Equal)) {
-            setUIScalingFactor(settings.ui_scale_factor + .25f);
+            auto const scaleFactor = settings.ui_scale_factor.value_or(1.0f);
+            setUIScalingFactor(scaleFactor + .25f);
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Minus)) {
-            setUIScalingFactor(settings.ui_scale_factor - .25f);
+            auto const scaleFactor = settings.ui_scale_factor.value_or(1.0f);
+            setUIScalingFactor(scaleFactor - .25f);
         }
     }
 }
