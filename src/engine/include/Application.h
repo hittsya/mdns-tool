@@ -46,6 +46,7 @@ public:
 private:
     void handleShortcuts();
     void loadAppIcon();
+    void loadAppLogoTexture();
     void tryAddService(ScanCardEntry entry, bool isAdvertized);
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
     float calcServiceCardHeight(std::size_t ipCount);
@@ -60,6 +61,7 @@ private:
     int                               m_width;
     int                               m_height;
     std::string                       m_title;
+    GLuint                            m_logo_texture;
     
     GLFWwindow*                       m_window = nullptr;
     MdnsHelper                        m_mdns_helper;

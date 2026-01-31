@@ -12,6 +12,8 @@
 #include <stb_image.h>
 
 #include <AppIcon.h>
+#include <AppLogo.h>
+
 #include <Logger.h>
 #include <ChangeLog.h>
 
@@ -65,7 +67,7 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     m_width  = settings.window_width.value_or(static_cast<int>(m_width * scale));
     m_height = settings.window_height.value_or(static_cast<int>(m_height * scale));
 
-    m_title  = "mDNS Scanner - " + buildInfo;
+    m_title  = "mDNS Scanner " + buildInfo;
     m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
     if (!m_window) {
         logger::core()->error("Failed to create window");
@@ -93,7 +95,10 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     );
 
     glfwMakeContextCurrent(m_window);
+    
     loadAppIcon();
+    loadAppLogoTexture();
+
     glfwSwapInterval(1);
     logger::core()->info("Root window initialized");
 
@@ -163,6 +168,21 @@ mdns::engine::Application::setUIScalingFactor(float newFactor)
 
     logger::ui()->info("Set UI scaling factor to " + std::to_string(newFactor));
     m_settings->getSettings().ui_scale_factor = newFactor;
+}
+
+void
+mdns::engine::Application::loadAppLogoTexture()
+{
+    int w, h, comp;
+    unsigned char* data = stbi_load_from_memory(app_icon, app_icon_len, &w, &h, &comp, 4);
+
+    glGenTextures  (1, &m_logo_texture);
+    glBindTexture  (GL_TEXTURE_2D, m_logo_texture);
+    glTexImage2D   (GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
 }
 
 void
@@ -369,17 +389,8 @@ mdns::engine::Application::renderUI()
         ImGui::Spacing();
         center_text(m_title.c_str());
         ImGui::Separator();
-
         ImGui::Spacing();
-        center_text("Author: Daniel Manoylo");
-
-        ImGui::Spacing();
-        center_text("Special thanks: Maxim Samborsky");
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
-
+        
         const char* github_url = "https://github.com/hittsya/mdns-tool";
         center_text("Source code:");
         ImGui::Spacing();
@@ -398,17 +409,19 @@ mdns::engine::Application::renderUI()
     }
 
     ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
+    ImGui::Image((ImTextureID)(intptr_t)m_logo_texture, ImVec2(48, 48));
+    ImGui::SameLine();
 
-    ImGui::Indent(10);
-    ImGui::TextUnformatted("Welcome to mDNS Scanner BETA");
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted(m_title.c_str());
     ImGui::Spacing();
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextUnformatted("Scan your local network for mDNS / Bonjour services");
+    ImGui::TextUnformatted("This marvelous piece of shit is produced by Daniel M, Maxim S., 30 january 2026, Bratislava");
     ImGui::PopStyleColor();
-    ImGui::Unindent(10);
+    ImGui::EndGroup();
+
     ImGui::Separator();
     ImGui::Spacing();
-
 
     renderDiscoveryLayout();
 
@@ -554,12 +567,21 @@ mdns::engine::Application::renderServiceCard(int index, ScanCardEntry const& ent
     }
 
     ImGui::SameLine();
+    ImVec4 bg        = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+    ImVec4 bg_hover  = ImVec4(0.70f, 0.70f, 0.70f, 1.0f);
+    ImVec4 bg_active = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
+
+    ImGui::PushStyleColor(ImGuiCol_Button,        bg);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bg_hover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  bg_active);
+    ImGui::PushStyleColor(ImGuiCol_Text,          ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
 
     if (ImGui::Button("Dissector metadata")) {
         m_show_dissector_meta_window = true;
-        m_dissector_meta_entry = entry;
+        m_dissector_meta_entry       = entry;
     }
 
+    ImGui::PopStyleColor(4);
     ImGui::EndChild();
     ImGui::Spacing();
     ImGui::PopID();
@@ -654,8 +676,9 @@ mdns::engine::Application::renderDiscoveryLayout()
     //ImGui::SameLine
     ImGui::SetNextItemWidth(300);
 
+    ImVec2 buttonSize(100, 30);
     ImGui::BeginDisabled(m_discovery_running);
-    if (ImGui::Button("Browse")) {
+    if (ImGui::Button("Browse", buttonSize)) {
         m_mdns_helper.startBrowse();
     }
     ImGui::EndDisabled();
@@ -664,11 +687,11 @@ mdns::engine::Application::renderDiscoveryLayout()
     ImGui::SetNextItemWidth(300);
 
     ImGui::BeginDisabled(!m_discovery_running);
-    if (ImGui::Button("Stop")) {
+    if (ImGui::Button("Stop", buttonSize)) {
         m_mdns_helper.stopBrowse();
     }
     ImGui::EndDisabled();
-    ImGui::Dummy(ImVec2(0.0f, 0.25f));
+    ImGui::Dummy(ImVec2(0.0f, 0.35f));
 
     ImGui::BeginGroup();
     ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
