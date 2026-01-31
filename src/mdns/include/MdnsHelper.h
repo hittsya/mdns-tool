@@ -29,7 +29,7 @@ private:
     void runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t>&& sockets);
     std::optional<proto::mdns_response> parseDiscoveryResponse(proto::mdns_recv_res const& message);
     const std::uint8_t* parseName(const std::uint8_t*& ptr, const  std::uint8_t *start, const std::uint8_t *end, std::string& out);
-    proto::mdns_rr parseRR(const std::uint8_t*& ptr, const std::uint8_t *start, const std::uint8_t *end, std::string& advertizedIP);
+    proto::mdns_rr parseRR(const std::uint8_t*& ptr, const std::uint8_t *start, const std::uint8_t *end);
     std::uint16_t readU16(const std::uint8_t*& ptr);
     std::uint32_t readU32(const std::uint8_t*& ptr);
 private:

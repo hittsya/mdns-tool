@@ -15,9 +15,10 @@ class Application
 public:
     struct CardEntry
     {
-        std::string              name;
-        std::vector<std::string> ip_addresses;
-        std::uint16_t            port;
+        std::string                    name;
+        std::vector<std::string>       ip_addresses;
+        std::uint16_t                  port;
+        std::vector<proto::mdns_rdata> dissector_meta;
     };
 
     struct ScanCardEntry: public CardEntry
@@ -52,7 +53,7 @@ private:
     void renderUI();
     void renderDiscoveryLayout();
     void renderRightSidebarLayout();
-    void renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port);
+    void renderServiceCard(int index, ScanCardEntry const& entry);
     void renderQuestionCard(int index, std::string const& name, std::string ipAddrs);
     void setUIScalingFactor(float scalingFactor);
 private:
@@ -67,6 +68,10 @@ private:
 
     bool 							  show_help_window = false;
     bool 							  m_show_changelog_window = false;
+    
+    bool 							  m_show_dissector_meta_window = false;
+    std::optional<ScanCardEntry>      m_dissector_meta_entry;
+
     bool                              m_open_ping_view = false;
     bool                              m_discovery_running = false;
 

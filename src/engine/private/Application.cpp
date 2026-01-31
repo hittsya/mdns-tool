@@ -287,6 +287,74 @@ mdns::engine::Application::renderUI()
         ImGui::End();
     }
 
+    if (m_show_dissector_meta_window)
+    {
+        auto const card = m_dissector_meta_entry.value_or(ScanCardEntry{"Unknown"});
+
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImVec2 size       = { vp->WorkSize.x * 0.5f, vp->WorkSize.y * 0.5f,};
+
+        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+        ImGui::Begin(("Dissector metadata: " + card.name).c_str(), &m_show_dissector_meta_window, ImGuiWindowFlags_None);
+
+        ImGui::TextDisabled("This card was build using this mDNS records");
+        ImGui::Spacing();
+
+        for (auto const& rr : card.dissector_meta) {
+            std::visit([&](auto const& entry) {
+                using T = std::decay_t<decltype(entry)>;
+
+                ImGui::PushID(&rr);
+
+                if constexpr(std::is_same_v<T, proto::mdns_rr_ptr_ext>) {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- PTR record");
+                    ImGui::Indent();
+                    ImGui::Text("Target: %s", entry.target.c_str());
+                    ImGui::Unindent();
+                }
+                else if constexpr(std::is_same_v<T, proto::mdns_rr_txt_ext>) {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- TXT record");
+                    ImGui::Indent();
+                    
+                    for (auto const& txt : entry.entries) {
+                        ImGui::Text("%s", txt.c_str());
+                    }
+
+                    ImGui::Unindent();
+                }
+                else if constexpr(std::is_same_v<T, proto::mdns_rr_srv_ext>) {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- SRV record");
+                    ImGui::Indent();
+                    ImGui::Text("Target:   %s", entry.target.c_str());
+                    ImGui::Text("Port:     %u", entry.port);
+                    ImGui::Text("Priority: %u", entry.priority);
+                    ImGui::Text("Weight:   %u", entry.weight);
+                    ImGui::Unindent();
+                }
+                else if constexpr (std::is_same_v<T, proto::mdns_rr_a_ext>) {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- A record");
+                    ImGui::Indent();
+                    ImGui::Text("IpV4:     %s", entry.address.c_str());
+                    ImGui::Unindent();
+                }
+                else if constexpr(std::is_same_v<T, proto::mdns_rr_aaaa_ext>) {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- AAAA record");
+                    ImGui::Indent();
+                    ImGui::Text("IpV6:     %s", entry.address.c_str());
+                    ImGui::Unindent();
+                }
+                else {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- UNKNOWN record");
+                }
+
+                ImGui::PopID();
+                ImGui::Spacing();
+            }, rr);
+        }
+
+        ImGui::End();
+    }
+
     if (show_help_window)
     {
         ImGui::Begin("Help", &show_help_window, ImGuiWindowFlags_AlwaysAutoResize);
@@ -396,13 +464,13 @@ mdns::engine::Application::renderQuestionCard(int index, std::string const& name
 
 
 void 
-mdns::engine::Application::renderServiceCard(int index, std::string const& name, std::vector<std::string> const& ipAddrs, std::uint16_t port)
+mdns::engine::Application::renderServiceCard(int index, ScanCardEntry const& entry)
 {
-    if(name.empty()) {
+    if(entry.name.empty()) {
         return;
 	}
 
-	auto const height = calcServiceCardHeight(ipAddrs.size());
+	auto const height = calcServiceCardHeight(entry.ip_addresses.size());
 
     ImGui::PushID(index);
     ImGui::BeginChild("ServiceCard", ImVec2(0, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
@@ -410,23 +478,23 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
     ImGui::SetWindowFontScale(1.1f);
 
     float windowWidth = ImGui::GetContentRegionAvail().x;
-    float textWidth = ImGui::CalcTextSize(name.c_str()).x;
+    float textWidth = ImGui::CalcTextSize(entry.name.c_str()).x;
 
-    ImGui::SeparatorText(name.c_str());
+    ImGui::SeparatorText(entry.name.c_str());
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleVar();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
     ImGui::Text("Hostname:");
     ImGui::SameLine(250);
-    ImGui::Text("%s", name.c_str());
+    ImGui::Text("%s", entry.name.c_str());
 
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
     ImGui::Text("IP Address(es):");
     ImGui::SameLine(250);
     ImGui::Indent(235);
 
-    for (auto const& ipAddr: ipAddrs) {
+    for (auto const& ipAddr: entry.ip_addresses) {
         ImGui::PushID(ipAddr.c_str());
         
         if(ImGui::Selectable(ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
@@ -446,13 +514,13 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
             ImGui::SameLine();
 
             if (ImGui::Button("Open in browser")) {
-                std::string url = name.find("https") != std::string::npos ? "https" : "http";
+                std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
 
                 url += "://";
                 url += ipAddr;
 
-                if (port != mdns::proto::port) {
-                    url += ":" + std::to_string(port);
+                if (entry.port != mdns::proto::port) {
+                    url += ":" + std::to_string(entry.port);
                 }
 
                 openInBrowser(url);
@@ -469,17 +537,17 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
 
     ImGui::Text("Port:");
     ImGui::SameLine(250);
-    ImGui::Text("%d", port);
+    ImGui::Text("%d", entry.port);
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     if (ImGui::Button("Open in browser")) {
-        std::string url = name.find("https") != std::string::npos ? "https": "http";
+        std::string url = entry.name.find("https") != std::string::npos ? "https": "http";
         
         url += "://";
-        url += name;
+        url += entry.name;
         
-        if (port != mdns::proto::port) {
-            url += ":" + std::to_string(port);
+        if (entry.port != mdns::proto::port) {
+            url += ":" + std::to_string(entry.port);
         }
         
         openInBrowser(url);
@@ -487,9 +555,10 @@ mdns::engine::Application::renderServiceCard(int index, std::string const& name,
 
     ImGui::SameLine();
 
-    /*if (ImGui::Button("Advanced data")) {
-
-    }*/
+    if (ImGui::Button("Dissector metadata")) {
+        m_show_dissector_meta_window = true;
+        m_dissector_meta_entry = entry;
+    }
 
     ImGui::EndChild();
     ImGui::Spacing();
@@ -514,7 +583,9 @@ mdns::engine::Application::openInBrowser(const std::string& url)
     }
 #else 
     std::string cmd = "xdg-open \"" + url + "\"";
-    system(cmd.c_str());
+    if (auto result = system(cmd.c_str())) {
+        logger::core()->error(fmt::format("Command {} failed with rc {}", cmd, result));
+    }
 #endif
 }
 
@@ -615,12 +686,7 @@ mdns::engine::Application::renderDiscoveryLayout()
         ImGui::Dummy(ImVec2(0.0f, 0.25f));
 
         for (auto const& service: m_discovered_services) {
-            renderServiceCard(
-                static_cast<int>(&service - &m_discovered_services[0]),
-                service.name,
-                service.ip_addresses,
-                service.port
-            );
+            renderServiceCard(static_cast<int>(&service - &m_discovered_services[0]), service);
         }
     }
 
@@ -657,29 +723,30 @@ mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response>&& r
         const bool advertised = !response.advertized_ip_addr_str.empty();
         const std::string& ip = advertised ? response.advertized_ip_addr_str : response.ip_addr_str;
 
-        auto process_entry = [&](const std::string& name, uint16_t port) {
+        auto process_entry = [&](const std::string& name, uint16_t port, proto::mdns_rdata const& rdata) {
             if (name.empty()) {
                 return;
             }
 
             ScanCardEntry entry{};
-            entry.ip_addresses = { ip };
-            entry.port         = port ? port : response.port;
-            entry.name         = name;
+            entry.ip_addresses   = { ip };
+            entry.port           = port ? port : response.port;
+            entry.name           = name;
+            entry.dissector_meta = { rdata };
 
             tryAddService(entry, advertised);
         };
 
         for (const auto& rr : response.answer_rrs) {
-            process_entry(rr.rdata_serialized, rr.port);
+            process_entry(rr.rdata_serialized, rr.port, rr.rdata);
         }
 
         for (const auto& rr : response.additional_rrs) {
-            process_entry(rr.rdata_serialized, rr.port);
+            process_entry(rr.rdata_serialized, rr.port, rr.rdata);
         }
 
         for (const auto& rr : response.authority_rrs) {
-            process_entry(rr.rdata_serialized, rr.port);
+            process_entry(rr.rdata_serialized, rr.port, rr.rdata);
         }
 
         for (const auto& q : response.questions_list) {
@@ -701,9 +768,21 @@ mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvertized)
 {
     auto serviceIt = std::find(m_discovered_services.begin(), m_discovered_services.end(), entry);
     if (serviceIt == m_discovered_services.end()) {
-        m_discovered_services.push_back(std::move(entry));
+        m_discovered_services.insert(m_discovered_services.begin(), std::move(entry));
         return;
 	}
+
+    bool exists = std::any_of(
+        serviceIt->dissector_meta.begin(),
+        serviceIt->dissector_meta.end(),
+        [&](const proto::mdns_rdata& rr) {
+            return rr == entry.dissector_meta.front();
+        }
+    );
+
+    if (!exists) {
+        serviceIt->dissector_meta.insert(serviceIt->dissector_meta.begin(), entry.dissector_meta.front());
+    }
 
     if (serviceIt->port == mdns::proto::port && serviceIt->port != entry.port) {
         // Handle case where SRV record with port appeared after all records

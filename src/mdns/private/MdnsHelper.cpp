@@ -176,7 +176,7 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
 }
 
 mdns::proto::mdns_rr
-mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, const std::uint8_t* end, std::string& advertizedIP)
+mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, const std::uint8_t* end)
 {
     proto::mdns_rr record{};
 
@@ -206,22 +206,20 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
     const std::uint8_t* rdata_start = ptr;
     const std::uint8_t* rdata_end   = ptr + rdlen;
 
-    record.rdata.assign(rdata_start, rdata_end);
-
     switch (record.type) {
-        case mdns::proto::MDNS_RECORDTYPE_PTR:
-        {
+        case mdns::proto::MDNS_RECORDTYPE_PTR: {
             const std::uint8_t* tmp = rdata_start;
             std::string target;
 
             if (parseName(tmp, start, end, target)) {
                 record.rdata_serialized = target;
+                record.rdata            = mdns::proto::mdns_rr_ptr_ext{ target };
             }
         } break;
 
-        case mdns::proto::MDNS_RECORDTYPE_TXT:
-        {
+        case mdns::proto::MDNS_RECORDTYPE_TXT: {
             const std::uint8_t* tmp = rdata_start;
+            mdns::proto::mdns_rr_txt_ext rr_txt{};
 
             while (tmp < rdata_end) {
                 std::uint8_t len = *tmp++;
@@ -230,63 +228,87 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
                 }
 
                 std::string txt(reinterpret_cast<const char*>(tmp), len);
-				logger::mdns()->trace("TXT record entry: " + txt);
+                rr_txt.entries.emplace_back(txt);
                 record.rdata_serialized += txt;
                 tmp += len;
             }
+
+            record.rdata = rr_txt;
         } break;
 
-        case mdns::proto::MDNS_RECORDTYPE_SRV:
-        {
+        case mdns::proto::MDNS_RECORDTYPE_SRV: {
             if (rdlen < 6) {
                 logger::mdns()->error("Malformed SRV record (too short)");
                 break;
             }
 
-            const std::uint8_t* tmp = rdata_start;
-            std::uint16_t priority  = readU16(tmp);
-            std::uint16_t weight    = readU16(tmp);
-            std::uint16_t port      = readU16(tmp);
+            const std::uint8_t* tmp = rdata_start;        
+            mdns::proto::mdns_rr_srv_ext srv;
 
-            std::string target;
-            if (!parseName(tmp, start, end, target)) {
+            srv.priority = readU16(tmp);
+            srv.weight   = readU16(tmp);
+            srv.port     = readU16(tmp);
+
+            if (!parseName(tmp, start, end, srv.target)) {
+                logger::mdns()->warn("Failed parsing name(MDNS_RECORDTYPE_SRV), dropping packet");
+                break;
+            }
+
+            if (!parseName(tmp, start, end, srv.target)) {
                 logger::mdns()->error("Malformed SRV record (bad target name)");
                 break;
             }
 
             logger::mdns()->trace(fmt::format(
                 "Discovered SRV record: {} -> {}:{} (prio={}, weight={})",
-                record.name, target, port, priority, weight
+                record.name, srv.target, srv.port, srv.priority, srv.weight
             ));
 
-            record.port             = port;
+            record.port             = srv.port;
             record.rdata_serialized = record.name;
+            record.rdata            = std::move(srv);
         } break;
 
-        case mdns::proto::MDNS_RECORDTYPE_A:
-        {
+        case mdns::proto::MDNS_RECORDTYPE_A: {
             if (rdlen == 4) {
-                char ip[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, rdata_start, ip, sizeof(ip));
-                advertizedIP = ip;
-                logger::core()->trace("Discovered A record: " + advertizedIP + " / " + record.name);
+                std::string advertisedIP;
+                advertisedIP.resize(INET_ADDRSTRLEN);
+
+                if(!inet_ntop(AF_INET, rdata_start, advertisedIP.data(), advertisedIP.size())) {
+                    logger::mdns()->trace("Failed parsing MDNS_RECORDTYPE_A packet");
+                    break;
+                }
+
+                advertisedIP.resize(std::strlen(advertisedIP.c_str()));
+                logger::mdns()->trace("Discovered A record: " + advertisedIP + " / " + record.name);
+
                 record.rdata_serialized = record.name;
+                record.rdata            = mdns::proto::mdns_rr_a_ext{ advertisedIP };
             }
         } break;
 
-        case mdns::proto::MDNS_RECORDTYPE_AAAA:
-        {
+        case mdns::proto::MDNS_RECORDTYPE_AAAA: {
             if (rdlen == 16) {
-                char ip[INET6_ADDRSTRLEN];
-                inet_ntop(AF_INET6, rdata_start, ip, sizeof(ip));
-                advertizedIP = ip;
-                logger::core()->trace("Discovered AAAA record: " + advertizedIP + " / " + record.name);
+                std::string advertisedIP;
+                advertisedIP.resize(INET6_ADDRSTRLEN);
+
+                if(!inet_ntop(AF_INET6, rdata_start, advertisedIP.data(), advertisedIP.size())) {
+                    logger::mdns()->trace("Failed parsing MDNS_RECORDTYPE_AAAA packet");
+                    break;
+                }
+
+                advertisedIP.resize(std::strlen(advertisedIP.c_str()));
+                logger::mdns()->trace("Discovered AAAA record: " + advertisedIP + " / " + record.name);
+
                 record.rdata_serialized = record.name;
+                record.rdata            = mdns::proto::mdns_rr_a_ext{ advertisedIP };
             }
         } break;
 
         default: 
         {
+            logger::mdns()->warn("Failed parsing RR, setting type to unknown");
+            record.rdata = mdns::proto::mdns_rr_unknown_ext{std::vector<std::uint8_t>{rdata_start, rdata_end}};
         } break;
     }
 
@@ -397,7 +419,7 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
         for (std::uint16_t i = 0; i < count; ++i) {
             const auto* before = data;
 
-            auto rr = parseRR(data, packet_start, packet_end, advertizedIP);
+            auto rr = parseRR(data, packet_start, packet_end);
             if (is_noisy_mdns_ptr(rr)) {
                 // TODO: Cache this RR name to db to later query by it
                 logger::mdns()->info("Skipping noisy PTR: " + rr.name);
@@ -408,6 +430,15 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
                 logger::mdns()->error("Malformed packet (bad RR parse)");
                 continue;
             }
+            
+            // If its the MDNS_RECORDTYPE_A/MDNS_RECORDTYPE_AAAA then set the advertised ip
+            std::visit([&](auto&& entry) {
+                using T = std::decay_t<decltype(entry)>;
+
+                if constexpr(std::is_same_v<T, proto::mdns_rr_a_ext> || std::is_same_v<T, proto::mdns_rr_aaaa_ext>) {
+                    advertizedIP = entry.address;
+                }
+            }, rr.rdata);
 
             out.push_back(std::move(rr));
         }

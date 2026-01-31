@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <variant>
 
 namespace mdns::proto {
 
@@ -22,14 +23,76 @@ struct mdns_question {
     uint16_t    clazz;
 };
 
+struct mdns_rr_ptr_ext {
+    std::string target;
+    bool operator==(const mdns_rr_ptr_ext& rhs) const {
+        return target == rhs.target;
+    }
+};
+
+struct mdns_rr_txt_ext {
+    std::vector<std::string> entries;
+
+    bool operator==(const mdns_rr_txt_ext& rhs) const {
+        return entries == rhs.entries;
+    }
+};
+
+struct mdns_rr_srv_ext {
+    std::uint16_t priority;
+    std::uint16_t weight;
+    std::uint16_t port;
+    std::string   target;
+
+    bool operator==(const mdns_rr_srv_ext& rhs) const {
+        return priority == rhs.priority &&
+               weight   == rhs.weight &&
+               port     == rhs.port &&
+               target   == rhs.target;
+    }
+};
+
+struct mdns_rr_a_ext {
+    std::string address;
+
+    bool operator==(const mdns_rr_a_ext& rhs) const {
+        return address == rhs.address;
+    }
+};
+
+struct mdns_rr_aaaa_ext {
+    std::string address;
+
+    bool operator==(const mdns_rr_aaaa_ext& rhs) const {
+        return address == rhs.address;
+    }
+};
+
+struct mdns_rr_unknown_ext {
+    std::vector<std::uint8_t> raw;
+
+    bool operator==(const mdns_rr_unknown_ext& rhs) const {
+        return raw == rhs.raw;
+    }
+};
+
+using mdns_rdata = std::variant<
+    mdns_rr_ptr_ext,
+    mdns_rr_txt_ext,
+    mdns_rr_srv_ext,
+    mdns_rr_a_ext,
+    mdns_rr_aaaa_ext,
+    mdns_rr_unknown_ext
+>;
+
 struct mdns_rr {
-    std::string           name;
-    std::uint16_t         type;
-    std::uint16_t         clazz;
-    std::uint32_t         ttl;
-    std::vector<uint8_t>  rdata;
-	std::uint16_t         port;
-    std::string           rdata_serialized;
+    std::string      name;
+    std::uint16_t    type;
+    std::uint16_t    clazz;
+    std::uint32_t    ttl;
+	std::uint16_t    port;
+    std::string      rdata_serialized;
+    mdns_rdata       rdata;
 };
 
 struct mdns_response {
