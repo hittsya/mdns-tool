@@ -163,7 +163,7 @@ mdns::MdnsHelper::parseName(const std::uint8_t*& ptr, const std::uint8_t* start,
     }
 
     if (!terminated) {
-        logger::mdns()->error("Malformed packet (name not terminated)");
+        logger::mdns()->error("Malformed packet (name not terminated) -- " + out);
         return nullptr;
     }
     
@@ -251,11 +251,6 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
 
             if (!parseName(tmp, start, end, srv.target)) {
                 logger::mdns()->warn("Failed parsing name(MDNS_RECORDTYPE_SRV), dropping packet");
-                break;
-            }
-
-            if (!parseName(tmp, start, end, srv.target)) {
-                logger::mdns()->error("Malformed SRV record (bad target name)");
                 break;
             }
 
