@@ -149,37 +149,56 @@ static constexpr uint8_t mdns_multi_query[] = {
     // Flags (standard query)
     0x00, 0x00,
 
-    // QDCOUNT = 2 questions
-    0x00, 0x02,
+    // QDCOUNT = 5 questions
+    0x00, 0x05,
 
-    // ANCOUNT, NSCOUNT, ARCOUNT = 0
+    // ANCOUNT, NSCOUNT, ARCOUNT
     0x00, 0x00,
     0x00, 0x00,
     0x00, 0x00,
 
-    // Question 1: _services._dns-sd._udp.local.
-    0x09, '_','s','e','r','v','i','c','e','s',
-    0x07, '_','d','n','s','-','s','d',
-    0x04, '_','u','d','p',
-    0x05, 'l','o','c','a','l',
+    // _services._dns-sd._udp.local.
+    0x09,'_','s','e','r','v','i','c','e','s',
+    0x07,'_','d','n','s','-','s','d',
+    0x04,'_','u','d','p',
+    0x05,'l','o','c','a','l',
     0x00,
-
-    // QTYPE = PTR
     0x00, MDNS_RECORDTYPE_PTR,
-    // QCLASS = QU | IN
-    0x80, MDNS_CLASS_IN,
+    0x00, MDNS_CLASS_IN,
 
-    // Question 2: _http._tcp.local.
-    0x05, '_','h','t','t','p',
-    0x04, '_','t','c','p',
-    0x05, 'l','o','c','a','l',
+    // _http._tcp.local.
+    0x05,'_','h','t','t','p',
+    0x04,'_','t','c','p',
+    0x05,'l','o','c','a','l',
     0x00,
-
-    // QTYPE = PTR
     0x00, MDNS_RECORDTYPE_PTR,
-    // QCLASS = QU | IN
-    0x80, MDNS_CLASS_IN
+    0x00, MDNS_CLASS_IN,
+    
+    // _https._tcp.local.
+    0x06,'_','h','t','t','p','s',
+    0x04,'_','t','c','p',
+    0x05,'l','o','c','a','l',
+    0x00,
+    0x00, MDNS_RECORDTYPE_PTR,
+    0x00, MDNS_CLASS_IN,
+
+    // _ssh._tcp.local.
+    0x04,'_','s','s','h',
+    0x04,'_','t','c','p',
+    0x05,'l','o','c','a','l',
+    0x00,
+    0x00, MDNS_RECORDTYPE_PTR,
+    0x00, MDNS_CLASS_IN,
+
+    // _ftp._tcp.local.
+    0x04,'_','f','t','p',
+    0x04,'_','t','c','p',
+    0x05,'l','o','c','a','l',
+    0x00,
+    0x00, MDNS_RECORDTYPE_PTR,
+    0x00, MDNS_CLASS_IN
 };
+
 
 
 }

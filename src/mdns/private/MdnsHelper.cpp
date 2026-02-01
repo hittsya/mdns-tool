@@ -213,6 +213,7 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
 
             if (parseName(tmp, start, end, target)) {
                 record.rdata_serialized = target;
+                record.name             = target;
                 record.rdata            = mdns::proto::mdns_rr_ptr_ext{ target };
             }
         } break;
@@ -403,7 +404,9 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
             return true;
         }
 
-        if (rr.name.size() > 6 && rr.name[0] == '_' && rr.name.find("._udp.local") != std::string::npos) {
+        auto const invlalidPrefix  = rr.name[0] == '_';
+        auto const invalidPostfix  = rr.name.find("._udp.local") != std::string::npos || rr.name.find("._tcp.local") != std::string::npos;
+        if (invlalidPrefix || invalidPostfix) {
             return true;
         }
 
