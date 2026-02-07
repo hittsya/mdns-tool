@@ -325,8 +325,7 @@ void mdns::engine::Application::renderUI()
 
         for (auto const &rr : card.dissector_meta)
         {
-            std::visit([&](auto const &entry)
-                       {
+            std::visit([&](auto const &entry) {
                 using T = std::decay_t<decltype(entry)>;
 
                 ImGui::PushID(&rr);
@@ -341,8 +340,12 @@ void mdns::engine::Application::renderUI()
                     ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- TXT record");
                     ImGui::Indent();
                     
-                    for (auto const& txt : entry.entries) {
-                        ImGui::Text("%s", txt.c_str());
+                    if (entry.entries.empty()) {
+                        ImGui::Text("0-bytes TXT record");
+                    } else {
+                        for (auto const& txt : entry.entries) {
+                            ImGui::Text("%s", txt.c_str());
+                        }
                     }
 
                     ImGui::Unindent();
@@ -368,8 +371,67 @@ void mdns::engine::Application::renderUI()
                     ImGui::Text("IpV6:     %s", entry.address.c_str());
                     ImGui::Unindent();
                 }
+                else if constexpr(std::is_same_v<T, proto::mdns_rr_nsec_ext>) {
+                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- NSEC record");
+                    ImGui::Indent();
+
+                    ImGui::Text("Next domain: %s", entry.next_domain.c_str());
+                    if (!entry.types.empty()) {
+                        ImGui::Text("Types:");
+                        ImGui::Indent();
+
+                        for (auto t : entry.types) {
+                            const char* name = "UNKNOWN";
+
+                            switch (t) {
+                                case proto::MDNS_RECORDTYPE_A:    name = "A"   ; break;
+                                case proto::MDNS_RECORDTYPE_AAAA: name = "AAAA"; break;
+                                case proto::MDNS_RECORDTYPE_PTR:  name = "PTR" ; break;
+                                case proto::MDNS_RECORDTYPE_TXT:  name = "TXT" ; break;
+                                case proto::MDNS_RECORDTYPE_SRV:  name = "SRV" ; break;
+                                case proto::MDNS_RECORDTYPE_NSEC: name = "NSEC"; break;
+                            }
+
+                            ImGui::Text("%s (%u)", name, t);
+                        }
+
+                        ImGui::Unindent();
+                    } else {
+                        ImGui::TextDisabled("No type bitmap present");
+                    }
+
+                    ImGui::Unindent();
+                }
                 else {
                     ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- UNKNOWN record");
+                    ImGui::Indent();
+
+                    const auto& data = entry.raw;
+
+                    if (data.empty()) {
+                        ImGui::TextDisabled("<empty>");
+                    } else {
+                        constexpr int bytes_per_row = 16;
+
+                        for (size_t i = 0; i < data.size(); i += bytes_per_row) {
+                            std::string hex;
+                            std::string ascii;
+
+                            for (size_t j = 0; j < bytes_per_row && i + j < data.size(); ++j) {
+                                uint8_t b = data[i + j];
+
+                                char buf[4];
+                                std::snprintf(buf, sizeof(buf), "%02X ", b);
+                                hex += buf;
+
+                                ascii += (b >= 32 && b <= 126) ? static_cast<char>(b) : '.';
+                            }
+
+                            ImGui::Text("%04zx  %-48s  %s", i, hex.c_str(), ascii.c_str());
+                        }
+                    }
+
+                    ImGui::Unindent();
                 }
 
                 ImGui::PopID();
@@ -483,8 +545,7 @@ void mdns::engine::Application::renderQuestionCard(int index, std::string const 
 
 void mdns::engine::Application::renderServiceCard(int index, ScanCardEntry const &entry)
 {
-    if (entry.name.empty())
-    {
+    if (entry.name.empty()) {
         return;
     }
 
@@ -780,18 +841,11 @@ void mdns::engine::Application::renderDiscoveryLayout()
 
 void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response> &&responses)
 {
-    for (auto &response : responses)
-    {
+    for (auto &response : responses) {
         const bool advertised = !response.advertized_ip_addr_str.empty();
         const std::string &ip = advertised ? response.advertized_ip_addr_str : response.ip_addr_str;
 
-        auto process_entry = [&](const std::string &name, uint16_t port, proto::mdns_rdata const &rdata)
-        {
-            if (name.empty())
-            {
-                return;
-            }
-
+        auto processEntry = [&](const std::string &name, uint16_t port, proto::mdns_rdata const &rdata) {
             ScanCardEntry entry{};
             entry.ip_addresses = {ip};
             entry.port = port ? port : response.port;
@@ -801,32 +855,26 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
             tryAddService(entry, advertised);
         };
 
-        for (const auto &rr : response.answer_rrs)
-        {
-            process_entry(rr.rdata_serialized, rr.port, rr.rdata);
+        for (auto const& rr : response.answer_rrs) {
+            processEntry(rr.name, rr.port, rr.rdata);
         }
 
-        for (const auto &rr : response.additional_rrs)
-        {
-            process_entry(rr.rdata_serialized, rr.port, rr.rdata);
+        for (auto const& rr : response.additional_rrs) {
+            processEntry(rr.name, rr.port, rr.rdata);
         }
 
-        for (const auto &rr : response.authority_rrs)
-        {
-            process_entry(rr.rdata_serialized, rr.port, rr.rdata);
+        for (auto const& rr : response.authority_rrs) {
+            processEntry(rr.name, rr.port, rr.rdata);
         }
 
-        for (const auto &q : response.questions_list)
-        {
+        for (auto const& q : response.questions_list) {
             QuestionCardEntry entry{};
             entry.ip_addresses = {ip};
             entry.name = q.name;
 
             auto serviceIt = std::find(m_intercepted_questions.begin(), m_intercepted_questions.end(), entry);
-            if (serviceIt == m_intercepted_questions.end())
-            {
+            if (serviceIt == m_intercepted_questions.end()) {
                 m_intercepted_questions.insert(m_intercepted_questions.begin(), std::move(entry));
-                return;
             }
         }
     }
@@ -834,9 +882,13 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
 
 void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvertized)
 {
+    auto const& meta = entry.dissector_meta[0];
+    if (std::holds_alternative<proto::mdns_rr_ptr_ext>(meta)) {
+        m_mdns_helper.addResolveQuery(std::get<proto::mdns_rr_ptr_ext>(meta).target);
+    }
+
     auto serviceIt = std::find(m_discovered_services.begin(), m_discovered_services.end(), entry);
-    if (serviceIt == m_discovered_services.end())
-    {
+    if (serviceIt == m_discovered_services.end()) {
         m_discovered_services.insert(m_discovered_services.begin(), std::move(entry));
         return;
     }
@@ -844,25 +896,22 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
     bool exists = std::any_of(
         serviceIt->dissector_meta.begin(),
         serviceIt->dissector_meta.end(),
-        [&](const proto::mdns_rdata &rr)
-        {
+        [&](const proto::mdns_rdata &rr) -> bool {
             return rr == entry.dissector_meta.front();
-        });
+        }
+    );
 
-    if (!exists)
-    {
+    if (!exists) {
         serviceIt->dissector_meta.insert(serviceIt->dissector_meta.begin(), entry.dissector_meta.front());
     }
 
-    if (serviceIt->port == mdns::proto::port && serviceIt->port != entry.port)
-    {
+    if (serviceIt->port == mdns::proto::port && serviceIt->port != entry.port) {
         // Handle case where SRV record with port appeared after all records
         // TODO: Weight?
         serviceIt->port = entry.port;
     }
 
-    if (isAdvertized)
-    {
+    if (isAdvertized) {
         // Handle case where anounced service is also advertizing an address.
         // We give priority to advertized IPs.
         serviceIt->ip_addresses = entry.ip_addresses;
@@ -872,22 +921,20 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
     auto ipIt = std::find(
         serviceIt->ip_addresses.begin(),
         serviceIt->ip_addresses.end(),
-        entry.ip_addresses.front());
+        entry.ip_addresses.front()
+    );
 
-    if (ipIt == serviceIt->ip_addresses.end())
-    {
+    if (ipIt == serviceIt->ip_addresses.end()) {
         serviceIt->ip_addresses.push_back(entry.ip_addresses.front());
 
         std::sort(
             serviceIt->ip_addresses.begin(),
             serviceIt->ip_addresses.end(),
-            [](std::string const &a, std::string const &b) -> bool
-            {
+            [](std::string const &a, std::string const &b) -> bool {
                 const bool a4 = a.find(':') == std::string::npos;
                 const bool b4 = b.find(':') == std::string::npos;
 
-                if (a4 != b4)
-                {
+                if (a4 != b4) {
                     return a4;
                 }
 

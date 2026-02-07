@@ -68,6 +68,15 @@ struct mdns_rr_aaaa_ext {
     }
 };
 
+struct mdns_rr_nsec_ext {
+    std::string           next_domain;
+    std::vector<uint16_t> types;
+
+    bool operator==(const mdns_rr_nsec_ext& rhs) const {
+        return next_domain == rhs.next_domain && types == rhs.types;
+    }
+};
+
 struct mdns_rr_unknown_ext {
     std::vector<std::uint8_t> raw;
 
@@ -82,17 +91,17 @@ using mdns_rdata = std::variant<
     mdns_rr_srv_ext,
     mdns_rr_a_ext,
     mdns_rr_aaaa_ext,
+    mdns_rr_nsec_ext,
     mdns_rr_unknown_ext
 >;
 
 struct mdns_rr {
-    std::string      name;
-    std::uint16_t    type;
-    std::uint16_t    clazz;
-    std::uint32_t    ttl;
-	std::uint16_t    port;
-    std::string      rdata_serialized;
-    mdns_rdata       rdata;
+    std::string    name;
+    std::uint16_t  type;
+    std::uint16_t  clazz;
+    std::uint32_t  ttl;
+	std::uint16_t  port;
+    mdns_rdata     rdata;
 };
 
 struct mdns_response {
@@ -130,7 +139,8 @@ enum mdns_record_type {
     // IP6 Address [Thomson]
     MDNS_RECORDTYPE_AAAA = 28,
     // Server Selection [RFC2782]
-    MDNS_RECORDTYPE_SRV = 33
+    MDNS_RECORDTYPE_SRV = 33,
+    MDNS_RECORDTYPE_NSEC = 47,
 };
 
 enum mdns_entry_type {
@@ -196,10 +206,8 @@ static constexpr uint8_t mdns_multi_query[] = {
     0x05,'l','o','c','a','l',
     0x00,
     0x00, MDNS_RECORDTYPE_PTR,
-    0x00, MDNS_CLASS_IN
+    0x00, MDNS_CLASS_IN,
 };
-
-
 
 }
 

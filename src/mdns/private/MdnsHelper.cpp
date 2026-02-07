@@ -41,6 +41,24 @@ void mdns::MdnsHelper::startBrowse() {
     });
 }
 
+void mdns::MdnsHelper::addResolveQuery(std::string const& query)
+{
+    auto it = std::find(browsing_queries_.begin(), browsing_queries_.end(), query);
+    if (it == browsing_queries_.end()) {
+        logger::mdns()->info("Adding question: " + query);
+        browsing_queries_.push_back(query);
+    }
+}
+
+void mdns::MdnsHelper::removeResolveQuery(std::string const& query)
+{
+    auto it = std::find(browsing_queries_.begin(), browsing_queries_.end(), query);
+    if (it != browsing_queries_.end()) {
+        logger::mdns()->info("Removing question: " + query);
+        browsing_queries_.erase(it);
+    }
+}
+
 void mdns::MdnsHelper::stopBrowse() {
     if (!browsing_.exchange(false)) {
         logger::mdns()->warn("Discovery not running");
@@ -58,6 +76,53 @@ void mdns::MdnsHelper::stopBrowse() {
     on_browsing_state_changed_(false);
 }
 
+std::vector<std::uint8_t> mdns::MdnsHelper::buildQuery(std::vector<std::string> const& services) const
+{
+    if (services.empty()) {
+        logger::mdns()->info("Service list is empty, baking generic query");
+        
+        return std::vector<std::uint8_t>(
+            std::begin(proto::mdns_multi_query),
+            std::end  (proto::mdns_multi_query)
+        );
+    }
+
+    std::vector<uint8_t> pkt;
+    pkt.push_back(0x00); pkt.push_back(0x00);
+    pkt.push_back(0x00); pkt.push_back(0x00);
+
+    uint16_t qdcount = services.size();
+    pkt.push_back(qdcount >> 8);
+    pkt.push_back(qdcount & 0xFF);
+
+    pkt.insert(pkt.end(), {0x00,0x00, 0x00,0x00, 0x00,0x00}); // AN, NS, AR
+
+    for (auto const& s: services) {
+        encodeDnsName(pkt, s);
+
+        pkt.push_back(0x00);
+        pkt.push_back(proto::MDNS_RECORDTYPE_PTR);
+
+        pkt.push_back(0x00);
+        pkt.push_back(proto::MDNS_CLASS_IN);
+    }
+
+    return pkt;
+}
+
+void mdns::MdnsHelper::encodeDnsName(std::vector<uint8_t>& out, std::string const& name) const
+{
+    std::stringstream ss(name);
+    std::string label;
+
+    while (std::getline(ss, label, '.')) {
+        out.push_back(static_cast<uint8_t>(label.size()));
+        out.insert(out.end(), label.begin(), label.end());
+    }
+
+    out.push_back(0x00);
+}
+
 void
 mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t>&& sockets)
 {
@@ -68,9 +133,11 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t
         auto now = std::chrono::steady_clock::now();
         
         if (now - last_query_time >= query_interval) {
+            auto const query = buildQuery(browsing_queries_);
+
             for (auto const socket: sockets) {
                 logger::mdns()->info("Sending discovery query: socket FD: " + std::to_string(socket));
-                impl_->send_multicast(socket, proto::mdns_multi_query, sizeof(proto::mdns_multi_query));
+                impl_->send_multicast(socket, query.data(), query.size());
             }
 
             last_query_time = now;
@@ -212,8 +279,7 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
             std::string target;
 
             if (parseName(tmp, start, end, target)) {
-                record.rdata_serialized = target;
-                record.name             = target;
+                record.name             = "";
                 record.rdata            = mdns::proto::mdns_rr_ptr_ext{ target };
             }
         } break;
@@ -230,7 +296,7 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
 
                 std::string txt(reinterpret_cast<const char*>(tmp), len);
                 rr_txt.entries.emplace_back(txt);
-                record.rdata_serialized += txt;
+                record.name += txt;
                 tmp += len;
             }
 
@@ -261,7 +327,6 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
             ));
 
             record.port             = srv.port;
-            record.rdata_serialized = record.name;
             record.rdata            = std::move(srv);
         } break;
 
@@ -276,10 +341,9 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
                 }
 
                 advertisedIP.resize(std::strlen(advertisedIP.c_str()));
+                
                 logger::mdns()->trace("Discovered A record: " + advertisedIP + " / " + record.name);
-
-                record.rdata_serialized = record.name;
-                record.rdata            = mdns::proto::mdns_rr_a_ext{ advertisedIP };
+                record.rdata = mdns::proto::mdns_rr_a_ext{ advertisedIP };
             }
         } break;
 
@@ -295,15 +359,56 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
 
                 advertisedIP.resize(std::strlen(advertisedIP.c_str()));
                 logger::mdns()->trace("Discovered AAAA record: " + advertisedIP + " / " + record.name);
-
-                record.rdata_serialized = record.name;
-                record.rdata            = mdns::proto::mdns_rr_a_ext{ advertisedIP };
+                record.rdata = mdns::proto::mdns_rr_a_ext{ advertisedIP };
             }
         } break;
 
-        default: 
-        {
-            logger::mdns()->warn("Failed parsing RR, setting type to unknown");
+        case mdns::proto::MDNS_RECORDTYPE_NSEC: {
+            const std::uint8_t* tmp = rdata_start;
+            mdns::proto::mdns_rr_nsec_ext nsec;
+
+            if (!parseName(tmp, start, end, nsec.next_domain)) {
+                logger::mdns()->warn("Failed parsing NSEC next domain");
+                break;
+            }
+
+            while (tmp < rdata_end) {
+                if (tmp + 2 > rdata_end) {
+                    logger::mdns()->warn("Malformed NSEC bitmap");
+                    break;
+                }
+
+                uint8_t window = *tmp++;
+                uint8_t len    = *tmp++;
+
+                if (tmp + len > rdata_end) {
+                    logger::mdns()->warn("NSEC bitmap overflow");
+                    break;
+                }
+
+                for (uint8_t i = 0; i < len; ++i) {
+                    uint8_t byte = tmp[i];
+                    for (int bit = 0; bit < 8; ++bit) {
+                        if (byte & (1 << (7 - bit))) {
+                            uint16_t rrtype = window * 256 + i * 8 + bit;
+                            nsec.types.push_back(rrtype);
+                        }
+                    }
+                }
+
+                tmp += len;
+            }
+
+            logger::mdns()->trace(fmt::format(
+                "NSEC record for {} indicates {} types",
+                record.name, nsec.types.size()
+            ));
+
+            record.rdata = std::move(nsec);
+        } break;
+
+        default: {
+            logger::mdns()->error(fmt::format("Failed parsing RR, setting type to unknown: {}", record.type));
             record.rdata = mdns::proto::mdns_rr_unknown_ext{std::vector<std::uint8_t>{rdata_start, rdata_end}};
         } break;
     }
@@ -391,39 +496,11 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
         response.questions_list.push_back(std::move(q));
     }
 
-    auto is_noisy_mdns_ptr = [&](const proto::mdns_rr& rr) -> bool {
-        if (rr.type != proto::MDNS_RECORDTYPE_PTR) {
-            return false;
-        }
-
-        if (rr.name == "_services._dns-sd._udp.local") {
-            return true;
-        }
-
-        if (rr.name == "_http._tcp.local") {
-            return true;
-        }
-
-        auto const invlalidPrefix  = rr.name[0] == '_';
-        auto const invalidPostfix  = rr.name.find("._udp.local") != std::string::npos || rr.name.find("._tcp.local") != std::string::npos;
-        if (invlalidPrefix || invalidPostfix) {
-            return true;
-        }
-
-        return false;
-    };
-
     auto parse_rr_block = [&](std::vector<proto::mdns_rr>& out, std::uint16_t count, std::string &advertizedIP) -> void {
         for (std::uint16_t i = 0; i < count; ++i) {
             const auto* before = data;
 
             auto rr = parseRR(data, packet_start, packet_end);
-            if (is_noisy_mdns_ptr(rr)) {
-                // TODO: Cache this RR name to db to later query by it
-                logger::mdns()->info("Skipping noisy PTR: " + rr.name);
-                continue;
-            }
-
             if (data <= before || data > packet_end) {
                 logger::mdns()->error("Malformed packet (bad RR parse)");
                 continue;
