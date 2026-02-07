@@ -8,6 +8,14 @@
 #include <memory>
 #include <stdexcept>
 
+#include <view/Dissector.h>
+#include <view/Help.h>
+#include <view/Questions.h>
+#include <view/Services.h>
+#include <view/Ping.h>
+
+#include <Util.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
@@ -260,220 +268,48 @@ void mdns::engine::Application::renderUI()
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     ImGui::Begin("##FullscreenRoot", nullptr, windowFlags);
 
-    if (ImGui::BeginMainMenuBar())
-    {
-        if (ImGui::BeginMenu("View"))
-        {
-            if (ImGui::MenuItem("Zoom In", "Ctrl +"))
-            {
+    if (ImGui::BeginMainMenuBar()) {
+        if (ImGui::BeginMenu("View")) {
+            if (ImGui::MenuItem("Zoom In", "Ctrl +")) {
                 setUIScalingFactor(0.1f);
             }
 
-            if (ImGui::MenuItem("Zoom Out", "Ctrl -"))
-            {
+            if (ImGui::MenuItem("Zoom Out", "Ctrl -")) {
                 setUIScalingFactor(-0.1f);
             }
 
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Help"))
-        {
-            if (ImGui::MenuItem("Open Help"))
-            {
+        if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("Open Help")) {
                 show_help_window = true;
             }
 
-            if (ImGui::MenuItem("GitHub repo"))
-            {
-                openInBrowser("https://github.com/hittsya/mdns-tool");
+            if (ImGui::MenuItem("GitHub repo")) {
+                mdns::engine::util::openInBrowser("https://github.com/hittsya/mdns-tool");
             }
 
             ImGui::EndMenu();
         }
 
-        if (ImGui::MenuItem("Changelog"))
-        {
+        if (ImGui::MenuItem("Changelog")) {
             m_show_changelog_window = true;
         }
 
         ImGui::EndMainMenuBar();
     }
 
-    if (m_show_changelog_window)
-    {
-        ImGui::Begin("Changelog", &m_show_changelog_window, ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Text(meta::CHANGELOG);
-        ImGui::End();
+    if (m_show_changelog_window) {
+        mdns::engine::ui::renderChangelogWindow(&m_show_changelog_window);
     }
 
-    if (m_show_dissector_meta_window)
-    {
-        auto const card = m_dissector_meta_entry.value_or(ScanCardEntry{"Unknown"});
-
-        ImGuiViewport *vp = ImGui::GetMainViewport();
-        ImVec2 size = {
-            vp->WorkSize.x * 0.5f,
-            vp->WorkSize.y * 0.5f,
-        };
-
-        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-        ImGui::Begin(("Dissector metadata: " + card.name).c_str(), &m_show_dissector_meta_window, ImGuiWindowFlags_None);
-
-        ImGui::TextDisabled("This card was build using this mDNS records");
-        ImGui::Spacing();
-
-        for (auto const &rr : card.dissector_meta)
-        {
-            std::visit([&](auto const &entry) {
-                using T = std::decay_t<decltype(entry)>;
-
-                ImGui::PushID(&rr);
-
-                if constexpr(std::is_same_v<T, proto::mdns_rr_ptr_ext>) {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- PTR record");
-                    ImGui::Indent();
-                    ImGui::Text("Target: %s", entry.target.c_str());
-                    ImGui::Unindent();
-                }
-                else if constexpr(std::is_same_v<T, proto::mdns_rr_txt_ext>) {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- TXT record");
-                    ImGui::Indent();
-                    
-                    if (entry.entries.empty()) {
-                        ImGui::Text("0-bytes TXT record");
-                    } else {
-                        for (auto const& txt : entry.entries) {
-                            ImGui::Text("%s", txt.c_str());
-                        }
-                    }
-
-                    ImGui::Unindent();
-                }
-                else if constexpr(std::is_same_v<T, proto::mdns_rr_srv_ext>) {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- SRV record");
-                    ImGui::Indent();
-                    ImGui::Text("Target:   %s", entry.target.c_str());
-                    ImGui::Text("Port:     %u", entry.port);
-                    ImGui::Text("Priority: %u", entry.priority);
-                    ImGui::Text("Weight:   %u", entry.weight);
-                    ImGui::Unindent();
-                }
-                else if constexpr (std::is_same_v<T, proto::mdns_rr_a_ext>) {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- A record");
-                    ImGui::Indent();
-                    ImGui::Text("IpV4:     %s", entry.address.c_str());
-                    ImGui::Unindent();
-                }
-                else if constexpr(std::is_same_v<T, proto::mdns_rr_aaaa_ext>) {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- AAAA record");
-                    ImGui::Indent();
-                    ImGui::Text("IpV6:     %s", entry.address.c_str());
-                    ImGui::Unindent();
-                }
-                else if constexpr(std::is_same_v<T, proto::mdns_rr_nsec_ext>) {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- NSEC record");
-                    ImGui::Indent();
-
-                    ImGui::Text("Next domain: %s", entry.next_domain.c_str());
-                    if (!entry.types.empty()) {
-                        ImGui::Text("Types:");
-                        ImGui::Indent();
-
-                        for (auto t : entry.types) {
-                            const char* name = "UNKNOWN";
-
-                            switch (t) {
-                                case proto::MDNS_RECORDTYPE_A:    name = "A"   ; break;
-                                case proto::MDNS_RECORDTYPE_AAAA: name = "AAAA"; break;
-                                case proto::MDNS_RECORDTYPE_PTR:  name = "PTR" ; break;
-                                case proto::MDNS_RECORDTYPE_TXT:  name = "TXT" ; break;
-                                case proto::MDNS_RECORDTYPE_SRV:  name = "SRV" ; break;
-                                case proto::MDNS_RECORDTYPE_NSEC: name = "NSEC"; break;
-                            }
-
-                            ImGui::Text("%s (%u)", name, t);
-                        }
-
-                        ImGui::Unindent();
-                    } else {
-                        ImGui::TextDisabled("No type bitmap present");
-                    }
-
-                    ImGui::Unindent();
-                }
-                else {
-                    ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "- UNKNOWN record");
-                    ImGui::Indent();
-
-                    const auto& data = entry.raw;
-
-                    if (data.empty()) {
-                        ImGui::TextDisabled("<empty>");
-                    } else {
-                        constexpr int bytes_per_row = 16;
-
-                        for (size_t i = 0; i < data.size(); i += bytes_per_row) {
-                            std::string hex;
-                            std::string ascii;
-
-                            for (size_t j = 0; j < bytes_per_row && i + j < data.size(); ++j) {
-                                uint8_t b = data[i + j];
-
-                                char buf[4];
-                                std::snprintf(buf, sizeof(buf), "%02X ", b);
-                                hex += buf;
-
-                                ascii += (b >= 32 && b <= 126) ? static_cast<char>(b) : '.';
-                            }
-
-                            ImGui::Text("%04zx  %-48s  %s", i, hex.c_str(), ascii.c_str());
-                        }
-                    }
-
-                    ImGui::Unindent();
-                }
-
-                ImGui::PopID();
-                ImGui::Spacing(); }, rr);
-        }
-
-        ImGui::End();
+    if (m_show_dissector_meta_window) {
+        mdns::engine::ui::renderDissectorWindow(m_dissector_meta_entry, &m_show_dissector_meta_window);
     }
 
-    if (show_help_window)
-    {
-        ImGui::Begin("Help", &show_help_window, ImGuiWindowFlags_AlwaysAutoResize);
-
-        auto center_text = [](const char *text)
-        {
-            float window_width = ImGui::GetWindowSize().x;
-            float text_width = ImGui::CalcTextSize(text).x;
-            ImGui::SetCursorPosX((window_width - text_width) * 0.5f);
-            ImGui::TextUnformatted(text);
-        };
-
-        ImGui::Spacing();
-        center_text(m_title.c_str());
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        const char *github_url = "https://github.com/hittsya/mdns-tool";
-        center_text("Source code:");
-        ImGui::Spacing();
-
-        float link_width = ImGui::CalcTextSize(github_url).x;
-        ImGui::SetCursorPosX((ImGui::GetWindowSize().x - link_width) * 0.5f);
-
-        if (ImGui::Selectable(github_url, false))
-        {
-            ImGui::SetClipboardText(github_url);
-        }
-
-        ImGui::Spacing();
-        ImGui::TextDisabled("(click to copy link)");
-
-        ImGui::End();
+    if (show_help_window) {
+        mdns::engine::ui::renderHelpWindow(&show_help_window, m_title.c_str());
     }
 
     ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
@@ -497,258 +333,28 @@ void mdns::engine::Application::renderUI()
     ImGui::PopStyleVar(2);
 }
 
-void mdns::engine::Application::renderQuestionCard(int index, std::string const &name, std::string ipAddrs)
-{
-    if (name.empty())
-    {
-        return;
-    }
-
-    ImGuiStyle const &style = ImGui::GetStyle();
-    ImGuiIO const &io = ImGui::GetIO();
-    float height = ImGui::GetTextLineHeight() + ImGui::GetFrameHeight() + style.FramePadding.y + 1.0f;
-
-    ImGui::PushID(index);
-    ImGui::BeginChild("QuestionCard", ImVec2(0, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-
-    float windowWidth = ImGui::GetContentRegionAvail().x;
-    float textWidth = ImGui::CalcTextSize(name.c_str()).x;
-
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::PopStyleVar();
-
-    ImGui::Dummy(ImVec2(0.0f, 0.5f));
-
-    ImGui::Text("Who has");
-    ImGui::SameLine();
-
-    // TODO: Bold text
-    ImVec2 pos = ImGui::GetCursorScreenPos();
-    ImDrawList *draw = ImGui::GetWindowDrawList();
-    ImU32 col = ImGui::GetColorU32(ImGuiCol_Text);
-
-    draw->AddText(pos, col, name.c_str());
-    draw->AddText(ImVec2(pos.x + 1, pos.y), col, name.c_str());
-
-    ImGui::Dummy(ImGui::CalcTextSize(name.c_str()));
-
-    ImGui::SameLine();
-    ImGui::Text("? -- via %s", ipAddrs.c_str());
-
-    ImGui::Dummy(ImVec2(0.0f, 1.0f));
-
-    ImGui::EndChild();
-    ImGui::Spacing();
-    ImGui::PopID();
-}
-
-void mdns::engine::Application::renderServiceCard(int index, ScanCardEntry const &entry)
-{
-    if (entry.name.empty()) {
-        return;
-    }
-
-    auto const height = calcServiceCardHeight(entry.ip_addresses.size());
-
-    ImGui::PushID(index);
-    ImGui::BeginChild("ServiceCard", ImVec2(0, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-    ImGui::SetWindowFontScale(1.1f);
-
-    float windowWidth = ImGui::GetContentRegionAvail().x;
-    float textWidth = ImGui::CalcTextSize(entry.name.c_str()).x;
-
-    ImGui::SeparatorText(entry.name.c_str());
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::PopStyleVar();
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
-
-    ImGui::Text("Hostname:");
-    ImGui::SameLine(250);
-    ImGui::Text("%s", entry.name.c_str());
-
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-    ImGui::Text("IP Address(es):");
-    ImGui::SameLine(250);
-    ImGui::Indent(235);
-
-    for (auto const &ipAddr : entry.ip_addresses)
-    {
-        ImGui::PushID(ipAddr.c_str());
-
-        if (ImGui::Selectable(ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns))
-        {
-            ImGui::OpenPopup("ip_actions_popup");
-        }
-
-        if (ImGui::BeginPopup("ip_actions_popup"))
-        {
-            ImGui::Text("IP: %s", ipAddr.c_str());
-            ImGui::Separator();
-
-            if (ImGui::Button("Ping"))
-            {
-                m_ping_tool.pingIpAddress(ipAddr);
-                m_open_ping_view = true;
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::SameLine();
-
-            if (ImGui::Button("Open in browser"))
-            {
-                std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
-
-                url += "://";
-                url += ipAddr;
-
-                if (entry.port != mdns::proto::port)
-                {
-                    url += ":" + std::to_string(entry.port);
-                }
-
-                openInBrowser(url);
-            }
-
-            ImGui::EndPopup();
-        }
-
-        ImGui::PopID();
-    }
-
-    ImGui::Unindent(235);
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-
-    ImGui::Text("Port:");
-    ImGui::SameLine(250);
-    ImGui::Text("%d", entry.port);
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-    if (ImGui::Button("Open in browser"))
-    {
-        std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
-
-        url += "://";
-        url += entry.name;
-
-        if (entry.port != mdns::proto::port)
-        {
-            url += ":" + std::to_string(entry.port);
-        }
-
-        openInBrowser(url);
-    }
-
-    ImGui::SameLine();
-    ImVec4 bg = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
-    ImVec4 bg_hover = ImVec4(0.70f, 0.70f, 0.70f, 1.0f);
-    ImVec4 bg_active = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
-
-    ImGui::PushStyleColor(ImGuiCol_Button, bg);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bg_hover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, bg_active);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
-
-    if (ImGui::Button("Dissector metadata"))
-    {
-        m_show_dissector_meta_window = true;
-        m_dissector_meta_entry = entry;
-    }
-
-    ImGui::PopStyleColor(4);
-    ImGui::EndChild();
-    ImGui::Spacing();
-    ImGui::PopID();
-}
-
-void mdns::engine::Application::openInBrowser(const std::string &url)
-{
-#ifdef _WIN32
-    HINSTANCE res = ShellExecuteA(
-        nullptr,
-        nullptr,
-        url.c_str(),
-        nullptr,
-        nullptr,
-        SW_SHOWNORMAL);
-
-    if ((INT_PTR)res <= 32)
-    {
-        logger::core()->error("Failed opening link: " + url);
-    }
-#else
-    std::string cmd = "xdg-open \"" + url + "\"";
-    if (auto result = system(cmd.c_str()))
-    {
-        logger::core()->error(fmt::format("Command {} failed with rc {}", cmd, result));
-    }
-#endif
-}
-
-void mdns::engine::Application::renderRightSidebarLayout()
-{
-    if (m_open_ping_view)
-    {
-        ImGui::SameLine();
-        ImGui::BeginGroup();
-
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 4));
-        ImGui::Text("Ping Tool");
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 20);
-        if (ImGui::Button("X##ClosePing"))
-        {
-            m_ping_tool.stopPing();
-            m_open_ping_view = false;
-        }
-
-        ImGui::PopStyleVar();
-        ImGui::Separator();
-        ImGui::BeginChild("PingPanel", ImVec2(600, 0), true);
-
-        ImGui::Text("Statistics:");
-
-        auto const &stats = m_ping_tool.getStats();
-        ImGui::Columns(2, "stats", false);
-        ImGui::Text("Sent: %d", stats.send);
-        ImGui::Text("Received: %d", stats.received);
-        ImGui::Text("Lost: %d", stats.lost);
-        ImGui::NextColumn();
-        ImGui::Text("Min: %d ms", stats.min == INT_MAX ? 0 : stats.min);
-        ImGui::Text("Max: %d ms", stats.max);
-        ImGui::Text("Avg: %d ms", stats.average);
-        ImGui::Columns(1);
-
-        ImGui::Separator();
-
-        ImGui::Text("Response Time");
-        static int historyOffset = 0;
-
-        ImGui::PlotLines("##PingGraph", stats.history.data(), stats.history.size(), historyOffset, nullptr, 0.0f, 100.0f, ImVec2(-1, 80));
-        ImGui::Separator();
-
-        ImGui::Text("Output:");
-        ImGui::BeginChild("PingOutput", ImVec2(0, 0), true);
-
-        ImGui::Text(m_ping_tool.getOutput().data());
-
-        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
-        {
-            ImGui::SetScrollHereY(1.0f);
-        }
-
-        ImGui::EndChild();
-        ImGui::EndChild();
-        ImGui::EndGroup();
-    }
-}
-
 void mdns::engine::Application::renderDiscoveryLayout()
 {
+    static auto onPingToolClick = [this](std::string const& ip) -> void {
+        m_ping_tool.pingIpAddress(ip);
+        m_open_ping_view = true;
+    };
+
+    static auto onDissectorClick = [this](ScanCardEntry entry) -> void {
+        m_show_dissector_meta_window = true;
+        m_dissector_meta_entry       = entry;
+    };
+
+    static auto onPingStop = [this]() -> void {
+        m_ping_tool.stopPing();
+        m_open_ping_view = false;
+    };
+
     /*static char searchBuffer[128] = "";
         ImGui::SetNextItemWidth(250);
         ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));*/
     // ImGui::SameLine
+
     ImGui::SetNextItemWidth(300);
 
     ImVec2 buttonSize(100, 30);
@@ -772,70 +378,13 @@ void mdns::engine::Application::renderDiscoveryLayout()
     ImGui::BeginGroup();
     ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
 
-    float availHeight = ImGui::GetContentRegionAvail().y;
-    float halfHeight = availHeight * 0.75f;
+    mdns::engine::ui::renderServiceLayout (m_discovered_services, onPingToolClick, onDissectorClick);
+    mdns::engine::ui::renderQuestionLayout(m_intercepted_questions);
 
-    ImGui::BeginChild("ServicesChild", ImVec2(0, halfHeight), true);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4));
-    ImGui::BeginChild("ServicesHeader", ImVec2(0, 54), false, ImGuiWindowFlags_NoScrollbar);
-
-    ImVec2 hmin = ImGui::GetWindowPos();
-    ImVec2 hmax = ImVec2(hmin.x + ImGui::GetWindowSize().x, hmin.y + ImGui::GetWindowSize().y);
-    ImGui::GetWindowDrawList()->AddRectFilled(hmin, hmax, IM_COL32(60, 70, 85, 255));
-
-    ImGui::Indent(15);
-    ImGui::Dummy(ImVec2(0.0f, 0.35f));
-    ImGui::TextUnformatted("Discovered Services");
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.9f, 1.0f, 1.0f));
-    ImGui::TextUnformatted("Devices/applications currently advertising services on the network");
-    ImGui::PopStyleColor();
-    ImGui::Unindent(15);
-
-    ImGui::EndChild();
-    ImGui::PopStyleVar(2);
-
-    ImGui::BeginChild("ServicesScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-    for (size_t i = 0; i < m_discovered_services.size(); ++i) {
-        renderServiceCard((int)i, m_discovered_services[i]);
+    if (m_open_ping_view) {
+        mdns::engine::ui::renderPingTool(m_ping_tool.getStats(), m_ping_tool.getOutput(), onPingStop);
     }
-    ImGui::EndChild();
-    ImGui::EndChild();
 
-    ImGui::BeginChild("QuestionsChild", ImVec2(0, 0), true);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 4));
-    ImGui::BeginChild("QuestionsHeader", ImVec2(0, 54), false, ImGuiWindowFlags_NoScrollbar);
-
-    ImVec2 qmin = ImGui::GetWindowPos();
-    ImVec2 qmax = ImVec2(qmin.x + ImGui::GetWindowSize().x, qmin.y + ImGui::GetWindowSize().y);
-    ImGui::GetWindowDrawList()->AddRectFilled(qmin, qmax, IM_COL32(60, 70, 85, 255));
-
-    ImGui::Indent(15);
-    ImGui::Dummy(ImVec2(0.0f, 0.35f));
-    ImGui::TextUnformatted("Service Discovery Requests");
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.85f, 0.9f, 1.0f, 1.0f));
-    ImGui::TextUnformatted("Intercepted network queries from devices that are searching for services");
-    ImGui::PopStyleColor();
-    ImGui::Unindent(15);
-
-    ImGui::EndChild();
-    ImGui::PopStyleVar(2);
-
-    ImGui::BeginChild("QuestionsScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-    for (size_t i = 0; i < m_intercepted_questions.size(); ++i) {
-        renderQuestionCard(
-            (int)i,
-            m_intercepted_questions[i].name,
-            m_intercepted_questions[i].ip_addresses[0]);
-    }
-    ImGui::EndChild();
-    ImGui::EndChild();
-
-    ImGui::EndChild();
-    renderRightSidebarLayout();
     ImGui::EndGroup();
 }
 
@@ -941,30 +490,4 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
                 return a < b;
             });
     }
-}
-
-float mdns::engine::Application::calcServiceCardHeight(std::size_t ipCount)
-{
-    ImGuiStyle const &style = ImGui::GetStyle();
-    ImGuiIO const &io = ImGui::GetIO();
-
-    const float line = ImGui::GetTextLineHeight();
-    const float spacing = style.ItemSpacing.y;
-    const float padding = style.WindowPadding.y * 2.0f;
-    const float frame = style.FramePadding.y * 2.0f;
-
-    float height = 0.0f;
-    height += line * 1.1f + spacing;
-    height += 4.0f;
-    height += line + spacing;
-    height += 3.0f;
-    height += line;
-    height += ipCount * (line + spacing);
-    height += 3.0f;
-    height += line + spacing;
-    height += 8.0f;
-    height += ImGui::GetFrameHeight() + spacing;
-    height += padding + frame;
-
-    return height;
 }

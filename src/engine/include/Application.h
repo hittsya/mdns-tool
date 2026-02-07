@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <MdnsHelper.h>
 #include <Ping46.h>
+#include <Types.h>
 #include <Settings.h>
 #include <imgui.h>
 
@@ -13,32 +14,6 @@ namespace mdns::engine
 class Application
 {   
 public:
-    struct CardEntry
-    {
-        std::string                    name;
-        std::vector<std::string>       ip_addresses;
-        std::uint16_t                  port;
-        std::vector<proto::mdns_rdata> dissector_meta;
-    };
-
-    struct ScanCardEntry: public CardEntry
-    {
-        // Services are unique only by their name
-        bool operator==(const ScanCardEntry& other) const noexcept
-        {   
-            return name == other.name;
-        }
-    };
-
-    struct QuestionCardEntry: public CardEntry
-    {
-        // Questions are unqiue by their source and name
-        bool operator==(const QuestionCardEntry& other) const noexcept
-        {
-            return name == other.name && ip_addresses[0] == other.ip_addresses[0];
-        }
-    };
-
     Application(int width, int height, std::string buildInfo);
     ~Application();
     void run();
@@ -49,13 +24,8 @@ private:
     void loadAppLogoTexture();
     void tryAddService(ScanCardEntry entry, bool isAdvertized);
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
-    float calcServiceCardHeight(std::size_t ipCount);
-	void openInBrowser(std::string const& url);
     void renderUI();
     void renderDiscoveryLayout();
-    void renderRightSidebarLayout();
-    void renderServiceCard(int index, ScanCardEntry const& entry);
-    void renderQuestionCard(int index, std::string const& name, std::string ipAddrs);
     void setUIScalingFactor(float scalingFactor);
 private:
     int                               m_width;

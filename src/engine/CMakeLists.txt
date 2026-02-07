@@ -1,5 +1,4 @@
-add_library(MDNS_Engine
-    include/ChangeLog.h)
+add_library(MDNS_Engine)
 
 target_sources(MDNS_Engine
         PUBLIC
@@ -8,6 +7,12 @@ target_sources(MDNS_Engine
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/private/Application.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/private/Ping46.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/Util.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Dissector.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Help.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Ping.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Questions.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Services.cpp
 )
 
 target_include_directories(MDNS_Engine
