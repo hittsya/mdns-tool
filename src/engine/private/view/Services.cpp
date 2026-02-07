@@ -112,9 +112,9 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
                 onOpenPingTool(ipAddr);
                 ImGui::CloseCurrentPopup();
             }
-
             ImGui::SameLine();
 
+            
             if (ImGui::Button("Open in browser")) {
                 std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
 
@@ -126,6 +126,13 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
                 }
 
                 mdns::engine::util::openInBrowser(url);
+            }
+            
+            ImGui::SameLine();
+            
+            auto const port = entry.name.find("_ssh") != std::string::npos ? entry.port: 22;
+            if (ImGui::Button(fmt::format("SSH root@{}:{}", ipAddr, port).c_str())) {
+                mdns::engine::util::openShellAndSSH(ipAddr, "root", port);
             }
 
             ImGui::EndPopup();
@@ -142,8 +149,7 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     ImGui::Text("%d", entry.port);
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
-    if (ImGui::Button("Open in browser"))
-    {
+    if (ImGui::Button("Open in browser")) {
         std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
 
         url += "://";
@@ -154,6 +160,13 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
         }
 
         mdns::engine::util::openInBrowser(url);
+    }
+
+    ImGui::SameLine();
+    
+    auto const port = entry.name.find("_ssh") != std::string::npos ? entry.port: 22;
+    if (ImGui::Button(fmt::format("SSH root@{}:{}", entry.name, port).c_str())) {
+        mdns::engine::util::openShellAndSSH(entry.name, "root", port);
     }
 
     ImGui::SameLine();

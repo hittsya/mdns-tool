@@ -10,6 +10,7 @@
 
 namespace mdns::engine::util {
     void openInBrowser(const std::string &url);
+    void openShellAndSSH(const std::string& host, const std::string& user, int port);
 }
 
 #endif //UTIL_H
