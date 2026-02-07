@@ -279,8 +279,8 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
             std::string target;
 
             if (parseName(tmp, start, end, target)) {
-                record.name             = "";
-                record.rdata            = mdns::proto::mdns_rr_ptr_ext{ target };
+                record.name   = "";
+                record.rdata  = mdns::proto::mdns_rr_ptr_ext{ target };
             }
         } break;
 
@@ -443,7 +443,7 @@ mdns::MdnsHelper::readU32(const std::uint8_t*& ptr) {
 std::optional<mdns::proto::mdns_response>
 mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     auto const& buffer = message.blob;
-
+    
     if (buffer.size() < sizeof(std::uint16_t)*6) {
         logger::mdns()->warn("mDNS packet too small: " + std::to_string(buffer.size()) + " bytes");
         return std::nullopt;
@@ -461,9 +461,10 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
         return std::nullopt;
     }
 
-    response.query_id    = readU16(data);
-    response.flags       = readU16(data);
-    response.questions   = readU16(data);
+    response.time_of_arrival = std::chrono::steady_clock::now();
+    response.query_id        = readU16(data);
+    response.flags           = readU16(data);
+    response.questions       = readU16(data);
 
     std::uint16_t const answer_rrs     = readU16(data);
     std::uint16_t const authority_rrs  = readU16(data);
@@ -525,9 +526,9 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
     parse_rr_block(response.authority_rrs , authority_rrs , response.advertized_ip_addr_str);
     parse_rr_block(response.additional_rrs, additional_rrs, response.advertized_ip_addr_str);
 
-    response.ip_addr_str = message.ip_addr_str;
-    response.port        = message.port;
-
+    response.ip_addr_str     = message.ip_addr_str;
+    response.port            = message.port;
+    
     return response;
 }
 

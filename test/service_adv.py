@@ -2,7 +2,7 @@ from zeroconf import Zeroconf, ServiceInfo
 import socket
 import time
 
-ip = "192.168.1.50"
+ip = "192.168.2.6"
 addr = socket.inet_aton(ip)
 
 services = [

@@ -108,7 +108,7 @@ mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& 
 	logger::net()->info("Will execute command: " + command);
 
 	m_output.clear();
-	m_output += "== Ping tool started == \n";
+	m_output += "\n== Ping tool started == \n";
 
 #ifdef _WIN32
 	SECURITY_ATTRIBUTES sa{};

@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <chrono>
 #include <variant>
 
 namespace mdns::proto {
@@ -115,9 +116,10 @@ struct mdns_response {
     std::vector<mdns_question> questions_list;
     std::vector<uint8_t>       packet;
 
-    std::string   ip_addr_str;
-    std::string   advertized_ip_addr_str;
-    std::uint16_t port;
+    std::string                           ip_addr_str;
+    std::string                           advertized_ip_addr_str;
+    std::uint16_t                         port;
+    std::chrono::steady_clock::time_point time_of_arrival;
 
     const uint8_t* packet_start() const {
         return packet.data();

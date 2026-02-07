@@ -94,17 +94,22 @@ void mdns::engine::util::openShellAndSSH(const std::string& host, const std::str
 #endif
 }
 
-std::string mdns::engine::util::stripMdnsServicePostfix(const std::string& name) {
-    size_t serviceStart = name.find("._");
-    if (serviceStart == std::string::npos) {
+std::string mdns::engine::util::stripMdnsServicePostfix(std::string const& name) {
+    size_t first = name.find("._");
+    if (first == std::string::npos) {
         return name;
     }
 
-    size_t domainStart = name.find('.', serviceStart + 2);
-    if (domainStart == std::string::npos) {
-        return name.substr(0, serviceStart);
+    size_t second = name.find("._", first + 2);
+    if (second == std::string::npos) {
+        return name.substr(0, first);
     }
 
-    return name.substr(0, serviceStart) + name.substr(domainStart);
+    size_t domain = name.find('.', second + 2);
+    if (domain == std::string::npos) {
+        return name.substr(0, first);
+    }
+
+    return name.substr(0, first) + name.substr(domain);
 }
 

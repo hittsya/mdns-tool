@@ -266,7 +266,14 @@ void mdns::engine::Application::renderUI()
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+    ImGui::SetNextWindowBgAlpha(0.0f);
     ImGui::Begin("##FullscreenRoot", nullptr, windowFlags);
+
+    ImDrawList* draw = ImGui::GetBackgroundDrawList(viewport);
+
+    ImU32 bg = IM_COL32(18, 19, 21, 255);
+    draw->AddRectFilled(viewport->Pos, ImVec2(viewport->Pos.x + viewport->Size.x, viewport->Pos.y + viewport->Size.y), bg);
 
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("View")) {
@@ -312,20 +319,26 @@ void mdns::engine::Application::renderUI()
         mdns::engine::ui::renderHelpWindow(&show_help_window, m_title.c_str());
     }
 
-    ImGui::Dummy(ImVec2(0.0f, ImGui::GetFrameHeight()));
-    ImGui::Image((ImTextureID)(intptr_t)m_logo_texture, ImVec2(48, 48));
+    ImGui::Dummy(ImVec2(0.0f, 18.0f));
+    float textH  = ImGui::GetTextLineHeight();
+    float imgH   = textH * 1.25f;
+    float offset = (imgH - textH) * 0.5f;
+
+    ImGui::Dummy(ImVec2(0.0f, 2.4f));
+    ImGui::Image((ImTextureID)(intptr_t)m_logo_texture, ImVec2(imgH, imgH));
     ImGui::SameLine();
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offset);
 
     ImGui::BeginGroup();
     ImGui::TextUnformatted(m_title.c_str());
-    ImGui::Spacing();
+    ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextUnformatted("This marvelous piece of shit is produced by Daniel M, Maxim S., 30 january 2026, Bratislava");
+    ImGui::TextUnformatted("| Browse for MDNS or Bonjour services via MDNS-SD");
     ImGui::PopStyleColor();
     ImGui::EndGroup();
 
-    ImGui::Separator();
-    ImGui::Spacing();
+    ImGui::SameLine();
 
     renderDiscoveryLayout();
 
@@ -355,30 +368,84 @@ void mdns::engine::Application::renderDiscoveryLayout()
         ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));*/
     // ImGui::SameLine
 
-    ImGui::SetNextItemWidth(300);
+    ImGuiStyle const& style = ImGui::GetStyle();
+    const char* label = m_discovery_running ? " Stop disovery" : " Browse services";
+    float h           = ImGui::GetFrameHeight() * 1.25f;
+    float textW       = ImGui::CalcTextSize(label).x;
+    float iconSpace   = h;  
+    float btnWidth    = textW + iconSpace + style.FramePadding.x * 4.0f;
+    float avail       = ImGui::GetContentRegionAvail().x;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - (btnWidth + 8.0f));
 
-    ImVec2 buttonSize(100, 30);
-    ImGui::BeginDisabled(m_discovery_running);
-    if (ImGui::Button("Browse", buttonSize)) {
-        m_mdns_helper.startBrowse();
+    ImVec4 blue  = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+    ImVec4 red   = ImVec4(0.85f, 0.45f, 0.45f, 1.0f);
+    ImVec4 base  = m_discovery_running ? red : blue;
+
+    ImVec4 btn      = ImVec4(base.x, base.y, base.z, 0.85f);
+    ImVec4 btnHover = ImVec4(base.x + 0.05f, base.y + 0.05f, base.z + 0.05f, 0.95f);
+    ImVec4 btnActive= ImVec4(base.x - 0.05f, base.y - 0.05f, base.z - 0.05f, 1.0f);
+    ImVec4 border   = ImVec4(1, 1, 1, 0.10f);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x * 0.6f, style.FramePadding.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
+    ImGui::PushStyleColor(ImGuiCol_Button, btn);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, btnHover);
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, btnActive);
+    ImGui::PushStyleColor(ImGuiCol_Border, border);
+    
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
+
+    if (ImGui::Button(label, ImVec2(btnWidth, h))) {
+        if (m_discovery_running) {
+            m_mdns_helper.stopBrowse();
+        } else {
+            m_mdns_helper.startBrowse();
+        }
     }
-    ImGui::EndDisabled();
 
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(300);
+    ImVec2 btnMin    = ImGui::GetItemRectMin();
+    ImVec2 btnMax    = ImGui::GetItemRectMax();
+    ImVec2 center    = ImVec2(btnMin.x + h * 0.5f, (btnMin.y + btnMax.y) * 0.5f);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
 
-    ImGui::BeginDisabled(!m_discovery_running);
-    if (ImGui::Button("Stop", buttonSize)) {
-        m_mdns_helper.stopBrowse();
+    if (!m_discovery_running) {
+        float r = h * 0.22f;
+        draw->AddTriangleFilled(
+            ImVec2(center.x - r * 0.6f, center.y - r),
+            ImVec2(center.x - r * 0.6f, center.y + r),
+            ImVec2(center.x + r, center.y),
+            IM_COL32(255, 255, 255, 255)
+        );
     }
-    ImGui::EndDisabled();
+    else {
+        float radius    = h * 0.22f;
+        float thickness = radius * 0.35f;
 
-    ImGui::Dummy(ImVec2(0.0f, 0.35f));
+        float time  = ImGui::GetTime();
+        float a_min = time * 6.0f;
+        float a_max = a_min + IM_PI * 1.5f;
+
+        draw->PathClear();
+        for (int i = 0; i <= 24; i++) {
+            float a = a_min + (i / 24.0f) * (a_max - a_min);
+            draw->PathLineTo(ImVec2(center.x + cosf(a) * radius, center.y + sinf(a) * radius));
+        }
+
+        draw->PathStroke(IM_COL32(255,255,255,255), false, thickness);
+    }
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar(3);
+
+    ImGui::Dummy(ImVec2(0.0f, 0.15f));
 
     ImGui::BeginGroup();
-    ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -600 : 0, 0), false);
+    ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -810 : 0, 0), false);
 
     mdns::engine::ui::renderServiceLayout (m_discovered_services, onPingToolClick, onDissectorClick);
+    ImGui::Dummy(ImVec2(0.0f, 3.0f));
     mdns::engine::ui::renderQuestionLayout(m_intercepted_questions);
 
     if (m_open_ping_view) {
@@ -394,36 +461,46 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
         const bool advertised = !response.advertized_ip_addr_str.empty();
         const std::string &ip = advertised ? response.advertized_ip_addr_str : response.ip_addr_str;
 
-        auto processEntry = [&](const std::string &name, uint16_t port, proto::mdns_rdata const &rdata) {
+        auto processEntry = [&](const std::string &name,
+                                uint16_t port,
+                                proto::mdns_rdata const &rdata,
+                                std::chrono::steady_clock::time_point const& toa
+        ) -> void {
             ScanCardEntry entry{};
-            entry.ip_addresses = {ip};
-            entry.port = port ? port : response.port;
-            entry.name = name;
-            entry.dissector_meta = {rdata};
+            entry.ip_addresses    = {ip};
+            entry.port            = port ? port : response.port;
+            entry.name            = name;
+            entry.time_of_arrival = toa;
+            entry.dissector_meta  = {rdata};
 
             tryAddService(entry, advertised);
         };
 
         for (auto const& rr : response.answer_rrs) {
-            processEntry(rr.name, rr.port, rr.rdata);
+            processEntry(rr.name, rr.port, rr.rdata, response.time_of_arrival);
         }
 
         for (auto const& rr : response.additional_rrs) {
-            processEntry(rr.name, rr.port, rr.rdata);
+            processEntry(rr.name, rr.port, rr.rdata, response.time_of_arrival);
         }
 
         for (auto const& rr : response.authority_rrs) {
-            processEntry(rr.name, rr.port, rr.rdata);
+            processEntry(rr.name, rr.port, rr.rdata, response.time_of_arrival);
         }
 
         for (auto const& q : response.questions_list) {
             QuestionCardEntry entry{};
-            entry.ip_addresses = {ip};
-            entry.name = q.name;
+            entry.ip_addresses    = {ip};
+            entry.name            = q.name;
+            entry.time_of_arrival = response.time_of_arrival;
 
-            auto serviceIt = std::find(m_intercepted_questions.begin(), m_intercepted_questions.end(), entry);
-            if (serviceIt == m_intercepted_questions.end()) {
+            auto it = std::find(m_intercepted_questions.begin(), m_intercepted_questions.end(), entry);
+            if (it == m_intercepted_questions.end()) {
                 m_intercepted_questions.insert(m_intercepted_questions.begin(), std::move(entry));
+
+                if (m_intercepted_questions.size() > 6) {
+                    m_intercepted_questions.pop_back();
+                }
             }
         }
     }
@@ -458,6 +535,10 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
         // Handle case where SRV record with port appeared after all records
         // TODO: Weight?
         serviceIt->port = entry.port;
+    }
+
+    if (serviceIt->time_of_arrival != entry.time_of_arrival) {
+        serviceIt->time_of_arrival= entry.time_of_arrival;
     }
 
     if (isAdvertized) {
