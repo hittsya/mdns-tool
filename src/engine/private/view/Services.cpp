@@ -56,8 +56,20 @@ void mdns::engine::ui::renderServiceLayout(std::vector<ScanCardEntry> const& dis
 
     ImGui::BeginChild("ServicesScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
     
+    float regionWidth  = ImGui::GetContentRegionAvail().x;
+    float minCardWidth = 875.0f;
+    float spacing      = ImGui::GetStyle().ItemSpacing.x * 2;
+
+    int cardsPerRow = (int)(regionWidth / (minCardWidth + spacing));
+    cardsPerRow     = std::max(1, cardsPerRow);
+    float cardWidth = (regionWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
+
     for (size_t i = 0; i < discovered_services.size(); ++i) {
-        renderServiceCard((int)i, discovered_services[i], onOpenPingTool, onOpenDissectorMeta);
+        renderServiceCard((int)i, discovered_services[i], cardWidth, onOpenPingTool, onOpenDissectorMeta);
+
+        if ((i + 1) % cardsPerRow != 0) {
+            ImGui::SameLine();
+        }
     }
 
     ImGui::EndChild();
@@ -65,7 +77,7 @@ void mdns::engine::ui::renderServiceLayout(std::vector<ScanCardEntry> const& dis
 
 }
 
-void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, std::function<void(std::string const&)> onOpenPingTool, std::function<void(ScanCardEntry entry)> onOpenDissectorMeta)
+void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, float cardWidth, std::function<void(std::string const&)> onOpenPingTool, std::function<void(ScanCardEntry entry)> onOpenDissectorMeta)
 {
     if (entry.name.empty()) {
         return;
@@ -74,12 +86,11 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     auto const height = calcServiceCardHeight(entry.ip_addresses.size());
 
     ImGui::PushID(index);
-    ImGui::BeginChild("ServiceCard", ImVec2(0, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
+    ImGui::BeginChild("ServiceCard", ImVec2(cardWidth, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);    
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
     ImGui::SetWindowFontScale(1.1f);
 
-    float windowWidth = ImGui::GetContentRegionAvail().x;
-    float textWidth = ImGui::CalcTextSize(entry.name.c_str()).x;
+    float textWidth   = ImGui::CalcTextSize(entry.name.c_str()).x;
 
     ImGui::SeparatorText(entry.name.c_str());
     ImGui::SetWindowFontScale(1.0f);
@@ -93,7 +104,7 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
     ImGui::Text("IP Address(es):");
     ImGui::SameLine(250);
-    ImGui::Indent(235);
+    ImGui::Indent(240);
 
     for (auto const &ipAddr : entry.ip_addresses)
     {
@@ -141,7 +152,7 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
         ImGui::PopID();
     }
 
-    ImGui::Unindent(235);
+    ImGui::Unindent(240);
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
 
     ImGui::Text("Port:");
@@ -149,11 +160,14 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     ImGui::Text("%d", entry.port);
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
+    auto const port = entry.name.find("_ssh") != std::string::npos ? entry.port: 22;
+    auto const name = mdns::engine::util::stripMdnsServicePostfix(entry.name);
+
     if (ImGui::Button("Open in browser")) {
         std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
 
         url += "://";
-        url += entry.name;
+        url += name;
 
         if (entry.port != mdns::proto::port) {
             url += ":" + std::to_string(entry.port);
@@ -164,9 +178,9 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
 
     ImGui::SameLine();
     
-    auto const port = entry.name.find("_ssh") != std::string::npos ? entry.port: 22;
-    if (ImGui::Button(fmt::format("SSH root@{}:{}", entry.name, port).c_str())) {
-        mdns::engine::util::openShellAndSSH(entry.name, "root", port);
+    
+    if (ImGui::Button(fmt::format("SSH root@{}:{}", name, port).c_str())) {
+        mdns::engine::util::openShellAndSSH(name, "root", port);
     }
 
     ImGui::SameLine();
@@ -185,6 +199,5 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
 
     ImGui::PopStyleColor(4);
     ImGui::EndChild();
-    ImGui::Spacing();
     ImGui::PopID();
 }

@@ -92,5 +92,19 @@ void mdns::engine::util::openShellAndSSH(const std::string& host, const std::str
         logger::core()->error("No terminal emulator found to launch SSH.");
     }
 #endif
-
 }
+
+std::string mdns::engine::util::stripMdnsServicePostfix(const std::string& name) {
+    size_t serviceStart = name.find("._");
+    if (serviceStart == std::string::npos) {
+        return name;
+    }
+
+    size_t domainStart = name.find('.', serviceStart + 2);
+    if (domainStart == std::string::npos) {
+        return name.substr(0, serviceStart);
+    }
+
+    return name.substr(0, serviceStart) + name.substr(domainStart);
+}
+

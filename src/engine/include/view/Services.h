@@ -9,7 +9,9 @@ namespace mdns::engine::ui
                              std::function<void(std::string const&)>   onOpenPingTool,
                              std::function<void(ScanCardEntry entry)>  onOpenDissectorMeta);
 
-    void renderServiceCard(int index, ScanCardEntry const&             entry,
+    void renderServiceCard(int                  index, 
+                           ScanCardEntry const& entry,
+                           float                cardWidth,
                            std::function<void(std::string const&)>     onOpenPingTool,
                            std::function<void(ScanCardEntry entry)>    onOpenDissectorMeta);
 }
