@@ -45,13 +45,11 @@ static bool extractTimeMs(const std::string& line, int& timeMs)
 
 static void pushHistory(std::vector<float> & history, int value)
 {
-	constexpr size_t MaxEntries = 100;
-
-	if (history.size() >= MaxEntries) {
+	if (history.size() >= 100) {
 		history.erase(history.begin());
 	}
 
-	history.push_back(float(value));
+	history.push_back(static_cast<float>(value));
 }
 
 void
@@ -71,7 +69,7 @@ mdns::engine::PingTool::pingIpAddress(const std::string& ipAddress)
 	}
 
 	m_thread = std::jthread (
-		[this, pingFunction, ipAddress](std::stop_token stop_token) -> void {
+		[this, pingFunction, ipAddress](std::stop_token const& stop_token) -> void {
 			logger::net()->info("Starting ping thread");
 			resetStats();
 			pingFunction(ipAddress, stop_token);
@@ -230,9 +228,7 @@ mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& 
 	int totalTime = 0;
 
 	while (!token.stop_requested()) {
-		ssize_t n = read(pipefd[0], buffer, sizeof(buffer) - 1);
-
-		if (n > 0) {
+		if (ssize_t const n = read(pipefd[0], buffer, sizeof(buffer) - 1); n > 0) {
 			buffer[n] = '\0';
 			std::string line(buffer);
 			m_output += line;
@@ -245,8 +241,7 @@ mdns::engine::PingTool::ping(const std::string& command, std::stop_token const& 
 			if (line.find("bytes from") != std::string::npos) {
 				m_stats.received++;
 
-				int timeMs = 0;
-				if (extractTimeMs(line, timeMs)) {
+				if (int timeMs = 0; extractTimeMs(line, timeMs)) {
 					totalTime += timeMs;
 					m_stats.min = std::min(m_stats.min, timeMs);
 					m_stats.max = std::max(m_stats.max, timeMs);

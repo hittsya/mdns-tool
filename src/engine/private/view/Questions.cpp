@@ -4,7 +4,6 @@
 
 void mdns::engine::ui::renderQuestionLayout(std::vector<QuestionCardEntry> const& intercepted_questions) 
 {
-    
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
     ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));

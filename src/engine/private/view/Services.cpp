@@ -32,8 +32,14 @@ static float calcServiceCardHeight(std::size_t ipCount)
     return height;
 }
 
-void mdns::engine::ui::renderServiceLayout(std::vector<ScanCardEntry> const& discovered_services, std::function<void(std::string const&)> onOpenPingTool, std::function<void(ScanCardEntry entry)> onOpenDissectorMeta) 
-{
+void mdns::engine::ui::renderServiceLayout(
+    std::vector<ScanCardEntry> const& discovered_services,
+    std::function<void(std::string const&)> onOpenPingTool,
+    std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
+    unsigned int browser_texture,
+    unsigned int info_texture,
+    unsigned int terminal_texture
+) {
     float availHeight = ImGui::GetContentRegionAvail().y;
     ImGuiStyle const& style = ImGui::GetStyle();
 
@@ -77,10 +83,25 @@ void mdns::engine::ui::renderServiceLayout(std::vector<ScanCardEntry> const& dis
     float cardWidth = (regionWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
 
     ImGui::Indent(18);
-    for (size_t i = 0; i < discovered_services.size(); ++i) {
-        renderServiceCard((int)i, discovered_services[i], cardWidth, onOpenPingTool, onOpenDissectorMeta);
+    for (size_t skipped = 0, i = 0; i < discovered_services.size(); ++i) {
+        if (discovered_services[i].name.empty()) {
+            ++skipped;
+            continue;
+        }
 
-        if ((i + 1) % cardsPerRow != 0) {
+        auto const index = i - skipped;
+        renderServiceCard(
+            static_cast<int>(index),
+            discovered_services[i],
+            cardWidth,
+            onOpenPingTool,
+            onOpenDissectorMeta,
+            browser_texture,
+            info_texture,
+            terminal_texture
+        );
+
+        if ((index + 1) % cardsPerRow != 0) {
             ImGui::SameLine();
         } else {
             ImGui::Dummy(ImVec2(0.0f, 3.5f));
@@ -92,12 +113,16 @@ void mdns::engine::ui::renderServiceLayout(std::vector<ScanCardEntry> const& dis
     ImGui::EndChild();
 }
 
-void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, float cardWidth, std::function<void(std::string const&)> onOpenPingTool, std::function<void(ScanCardEntry entry)> onOpenDissectorMeta)
-{
-    if (entry.name.empty()) {
-        return;
-    }
-
+void mdns::engine::ui::renderServiceCard(
+    int index,
+    ScanCardEntry const& entry,
+    float cardWidth,
+    std::function<void(std::string const&)> onOpenPingTool,
+    std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
+    unsigned int browser_texture,
+    unsigned int info_texture,
+    unsigned int terminal_texture
+) {
     auto const height = calcServiceCardHeight(entry.ip_addresses.size());
 
     ImGui::PushID(index);
@@ -228,33 +253,85 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
     mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+    {
+        const char* label = "  Open in browser";
+        ImVec2 textSize2  = ImGui::CalcTextSize(label);
+        float iconSize    = ImGui::GetTextLineHeight();
+        float pad         = ImGui::GetStyle().FramePadding.x;
+        ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2, iconSize + ImGui::GetStyle().FramePadding.y * 4);
 
-    if (ImGui::Button("Open in browser")) {
-        std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
+        if (ImGui::Button(label, btnSize)) {
+            std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
 
-        url += "://";
-        url += name;
+            url += "://";
+            url += name;
 
-        if (entry.port != mdns::proto::port) {
-            url += ":" + std::to_string(entry.port);
+            if (entry.port != mdns::proto::port) {
+                url += ":" + std::to_string(entry.port);
+            }
+
+            mdns::engine::util::openInBrowser(url);
         }
 
-        mdns::engine::util::openInBrowser(url);
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        ImVec2 min = ImGui::GetItemRectMin();
+        ImVec2 max = ImGui::GetItemRectMax();
+
+        ImVec2 iconPos = ImVec2(
+            min.x + pad  + 3.0f,
+            min.y + (btnSize.y - iconSize) * 0.5f
+        );
+        draw->AddImage((ImTextureID)(intptr_t)browser_texture, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
     }
 
     ImGui::SameLine();
+    {
+        std::string labelStr = fmt::format("  SSH root@{}", name);
+        ImVec2 textSize2     = ImGui::CalcTextSize(labelStr.c_str());
+        float iconSize       = ImGui::GetTextLineHeight();
+        float pad            = ImGui::GetStyle().FramePadding.x;
+        ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2, iconSize + ImGui::GetStyle().FramePadding.y * 4);
 
-    if (ImGui::Button(fmt::format("SSH root@{}:{}", name, port).c_str())) {
-        mdns::engine::util::openShellAndSSH(name, "root", port);
+        if (ImGui::Button(labelStr.c_str(), btnSize)) {
+            mdns::engine::util::openShellAndSSH(name, "root", port);
+        }
+
+        ImDrawList* draw = ImGui::GetWindowDrawList();
+        ImVec2 min = ImGui::GetItemRectMin();
+        ImVec2 max = ImGui::GetItemRectMax();
+
+        ImVec2 iconPos = ImVec2(
+            min.x + pad + 3.0f,
+            min.y + (btnSize.y - iconSize) * 0.5f
+        );
+        draw->AddImage((ImTextureID)(intptr_t)terminal_texture, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
     }
 
     ImGui::SameLine();
 
     mdns::engine::ui::popThemedButtonStyles();
-    mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
+    mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.55f, 0.57f, 0.60f, 1.0f));
 
-    if (ImGui::Button("Dissector metadata")) {
-        onOpenDissectorMeta(entry);
+    {
+        const char* label    = "Metadata";
+        ImVec2 textSize2     = ImGui::CalcTextSize(label);
+        float iconSize       = ImGui::GetTextLineHeight() ;
+        float pad            = ImGui::GetStyle().FramePadding.x;
+        ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2, iconSize + ImGui::GetStyle().FramePadding.y * 4);
+
+        if (ImGui::Button(label, btnSize)) {
+            onOpenDissectorMeta(entry);
+        }
+        //
+        // ImDrawList* draw = ImGui::GetWindowDrawList();
+        // ImVec2 min = ImGui::GetItemRectMin();
+        // ImVec2 max = ImGui::GetItemRectMax();
+        //
+        // ImVec2 iconPos = ImVec2(
+        //     min.x + pad,
+        //     min.y + (btnSize.y - iconSize) * 0.5f
+        // );
+        // draw->AddImage((ImTextureID)(intptr_t)info_texture, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
     }
 
     mdns::engine::ui::popThemedButtonStyles();

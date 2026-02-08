@@ -15,11 +15,13 @@ void mdns::engine::ui::renderDissectorWindow(std::optional<ScanCardEntry> const&
     ImGui::SetNextWindowSize(size, ImGuiCond_Always);
 
     mdns::engine::ui::pushThemedWindowStyles();
-    ImGui::Begin(("Dissector metadata: " + card.name).c_str(), show, ImGuiWindowFlags_None);
+    ImGui::Begin(("Dissected mDNS RR's: " + card.name).c_str(), show, ImGuiWindowFlags_None);
     mdns::engine::ui::popThemedWindowStyles();
 
     ImGui::BeginGroup();
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
+
+    auto const textColor = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
 
     for (auto const &rr: card.dissector_meta) {
         std::visit([&]<typename T0>(T0 const &entry) {
@@ -28,13 +30,13 @@ void mdns::engine::ui::renderDissectorWindow(std::optional<ScanCardEntry> const&
             ImGui::PushID(&rr);
 
             if constexpr(std::is_same_v<T, proto::mdns_rr_ptr_ext>) {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "PTR record");
+                ImGui::TextColored(textColor, "PTR record");
                 ImGui::Indent();
                 ImGui::Text("Target: %s", entry.target.c_str());
                 ImGui::Unindent();
             }
             else if constexpr(std::is_same_v<T, proto::mdns_rr_txt_ext>) {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "TXT record");
+                ImGui::TextColored(textColor, "TXT record");
                 ImGui::Indent();
                 
                 if (entry.entries.empty()) {
@@ -48,7 +50,7 @@ void mdns::engine::ui::renderDissectorWindow(std::optional<ScanCardEntry> const&
                 ImGui::Unindent();
             }
             else if constexpr(std::is_same_v<T, proto::mdns_rr_srv_ext>) {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "SRV record");
+                ImGui::TextColored(textColor, "SRV record");
                 ImGui::Indent();
                 ImGui::Text("Target:   %s", entry.target.c_str());
                 ImGui::Text("Port:     %u", entry.port);
@@ -57,19 +59,19 @@ void mdns::engine::ui::renderDissectorWindow(std::optional<ScanCardEntry> const&
                 ImGui::Unindent();
             }
             else if constexpr (std::is_same_v<T, proto::mdns_rr_a_ext>) {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "A record");
+                ImGui::TextColored(textColor, "A record");
                 ImGui::Indent();
                 ImGui::Text("IpV4:     %s", entry.address.c_str());
                 ImGui::Unindent();
             }
             else if constexpr(std::is_same_v<T, proto::mdns_rr_aaaa_ext>) {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "AAAA record");
+                ImGui::TextColored(textColor, "AAAA record");
                 ImGui::Indent();
                 ImGui::Text("IpV6:     %s", entry.address.c_str());
                 ImGui::Unindent();
             }
             else if constexpr(std::is_same_v<T, proto::mdns_rr_nsec_ext>) {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "NSEC record");
+                ImGui::TextColored(textColor, "NSEC record");
                 ImGui::Indent();
 
                 ImGui::Text("Next domain: %s", entry.next_domain.c_str());
@@ -100,7 +102,7 @@ void mdns::engine::ui::renderDissectorWindow(std::optional<ScanCardEntry> const&
                 ImGui::Unindent();
             }
             else {
-                ImGui::TextColored({0.8f, 0.7f, 1.0f, 1.0f}, "UNKNOWN record");
+                ImGui::TextColored(textColor, "UNKNOWN record");
                 ImGui::Indent();
 
                 const auto& data = entry.raw;

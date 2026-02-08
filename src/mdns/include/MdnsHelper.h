@@ -31,12 +31,15 @@ public:
 private:
     void runDiscovery(std::stop_token const& stop_token, std::vector<sock_fd_t>&& sockets);
     std::optional<proto::mdns_response> parseDiscoveryResponse(proto::mdns_recv_res const& message);
-    const std::uint8_t* parseName(const std::uint8_t*& ptr, const  std::uint8_t *start, const std::uint8_t *end, std::string& out);
+
+    static const std::uint8_t* parseName(const std::uint8_t*& ptr, const  std::uint8_t *start, const std::uint8_t *end, std::string& out);
     proto::mdns_rr parseRR(const std::uint8_t*& ptr, const std::uint8_t *start, const std::uint8_t *end);
-    std::uint16_t readU16(const std::uint8_t*& ptr);
-    std::uint32_t readU32(const std::uint8_t*& ptr);
+
+    static std::uint16_t readU16(const std::uint8_t*& ptr);
+    static std::uint32_t readU32(const std::uint8_t*& ptr);
     std::vector<std::uint8_t> buildQuery(std::vector<std::string> const& services) const;
-    void encodeDnsName(std::vector<uint8_t>& out, std::string const& name) const;
+
+    static void encodeDnsName(std::vector<uint8_t>& out, std::string const& name);
 private:
     struct BackendImpl;
     std::unique_ptr<BackendImpl> impl_;

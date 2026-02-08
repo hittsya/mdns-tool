@@ -3,7 +3,7 @@
 int main(int argc, char **argv)
 {
 	auto buildInfo = "1.0.0 (" + std::string(GIT_COMMIT_SHORT) + ")";
-    if (GIT_DIRTY) {
+    if constexpr (GIT_DIRTY) {
         buildInfo += " [dirty]";
     }
 

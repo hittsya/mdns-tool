@@ -16,9 +16,6 @@
 
 namespace {
 
-constexpr unsigned char localhost[]        = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
-constexpr unsigned char localhost_mapped[] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0x7f, 0, 0, 1};
-
 bool isLoopback(struct sockaddr_in *sockaddr) {
     return (ntohl(sockaddr->sin_addr.s_addr) & 0xFF000000) == 0x7F000000;
 }
@@ -77,7 +74,7 @@ std::string getErrnoString() {
     return err ? err : "";
 }
 
-int initalizeIpv4Socket(ifaddrs *ifa, sockaddr_in *sockaddr, int port) {
+int initalizeIpv4Socket(sockaddr_in *sockaddr, int port) {
     sockaddr->sin_port = htons(port);
 
     auto sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -215,7 +212,7 @@ int initalizeIpv6Socket(ifaddrs *ifa, sockaddr_in6 *sockaddr, int port) {
 }
 
 std::vector<mdns::MdnsHelper::sock_fd_t>
-mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max, int port) {
+mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(const std::size_t max, [[maybe_unused]] int port) {
     std::vector<sock_fd_t> result;
     result.reserve(max);
 
@@ -244,7 +241,7 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
                 continue;
             }
 
-            auto sock = initalizeIpv4Socket(curr_if, sockaddr, 0);
+            auto sock = initalizeIpv4Socket(sockaddr, 0);
             if (sock < 0) {
                 logger::mdns()->warn("Skipping IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
                 continue;
@@ -253,7 +250,7 @@ mdns::MdnsHelper::BackendImpl::open_client_sockets_foreach_iface(std::size_t max
             logger::mdns()->trace("Init IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
             result.push_back(std::move(sock));
 
-            sock = initalizeIpv4Socket(curr_if, sockaddr, proto::port);
+            sock = initalizeIpv4Socket(sockaddr, proto::port);
             if (sock < 0) {
                 logger::mdns()->warn("Skipping IPv4 socket: " + inet2str(conv, sizeof(conv), sockaddr, sizeof(sockaddr_in)));
                 continue;

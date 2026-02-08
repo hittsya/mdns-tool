@@ -14,13 +14,17 @@
 #include <view/Services.h>
 #include <view/Ping.h>
 
+#include <images/AppIcon.h>
+#include <images/Browser.h>
+#include <images/Info.h>
+#include <images/Terminal.h>
+
 #include <style/Button.h>
 #include <Util.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include <AppIcon.h>
 #include <Logger.h>
 
 #if defined(WIN32)
@@ -31,7 +35,20 @@
 #define GL_SILENCE_DEPRECATION
 #endif
 
-mdns::engine::Application::Application(int width, int height, std::string buildInfo)
+static std::string toLower(std::string s)
+{
+    std::ranges::transform(
+        s,
+        s.begin(),
+        [](unsigned char c) {
+            return std::tolower(c);
+        }
+    );
+
+    return s;
+}
+
+mdns::engine::Application::Application(int const width, int const height, std::string const& buildInfo)
     : m_width(width), m_height(height)
 {
     logger::init();
@@ -67,8 +84,8 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     m_settings = std::make_unique<meta::Settings>();
     logger::core()->info("Settings initialized");
 
-    float scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
-    auto &settings = m_settings->getSettings();
+    float const scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+    auto const& settings = m_settings->getSettings();
 
     m_width = settings.window_width.value_or(static_cast<int>(m_width * scale));
     m_height = settings.window_height.value_or(static_cast<int>(m_height * scale));
@@ -103,7 +120,11 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
     glfwMakeContextCurrent(m_window);
 
     loadAppIcon();
-    loadAppLogoTexture();
+
+    loadTexture(&m_logo_texture, app_icon, app_icon_len);
+    loadTexture(&m_browser_texture, browser_png, browser_png_len);
+    loadTexture(&m_info_texture, info_png, info_png_len);
+    loadTexture(&m_terminal_texture, terminal_png, terminal_png_len);
 
     glfwSwapInterval(1);
     logger::core()->info("Root window initialized");
@@ -115,13 +136,16 @@ mdns::engine::Application::Application(int width, int height, std::string buildI
 
     setUIScalingFactor(m_settings->getSettings().ui_scale_factor.value_or(1.0f));
 
-    m_mdns_helper.connectOnServiceDiscovered(
+    m_ping_tool   = std::make_unique<PingTool>();
+    m_mdns_helper = std::make_unique<MdnsHelper>();
+
+    m_mdns_helper->connectOnServiceDiscovered(
         [this](std::vector<proto::mdns_response> &&responses) -> void
         {
             onScanDataReady(std::move(responses));
         });
 
-    m_mdns_helper.connectOnBrowsingStateChanged(
+    m_mdns_helper->connectOnBrowsingStateChanged(
         [this](bool enabled) -> void
         {
             m_discovery_running = enabled;
@@ -173,21 +197,23 @@ void mdns::engine::Application::setUIScalingFactor(float newFactor) const
     m_settings->getSettings().ui_scale_factor = newFactor;
 }
 
-void mdns::engine::Application::loadAppLogoTexture()
+void mdns::engine::Application::loadTexture(GLuint* dest, unsigned char data[], unsigned int length)
 {
-    int w, h, comp;
-    unsigned char *data = stbi_load_from_memory(app_icon, app_icon_len, &w, &h, &comp, 4);
+    logger::core()->info(fmt::format("Loading texture, length: {}", length));
 
-    glGenTextures(1, &m_logo_texture);
-    glBindTexture(GL_TEXTURE_2D, m_logo_texture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    int w, h, comp;
+    unsigned char *data_ = stbi_load_from_memory(data, length, &w, &h, &comp, 4);
+
+    glGenTextures  (1, dest);
+    glBindTexture  (GL_TEXTURE_2D, *dest);
+    glTexImage2D   (GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, data_);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    stbi_image_free(data);
+    stbi_image_free(data_);
 }
 
-void mdns::engine::Application::loadAppIcon()
+void mdns::engine::Application::loadAppIcon() const
 {
     int w, h, comp;
     unsigned char *pixels = stbi_load_from_memory(app_icon, app_icon_len, &w, &h, &comp, 4);
@@ -201,11 +227,11 @@ void mdns::engine::Application::loadAppIcon()
     stbi_image_free(pixels);
 }
 
-void mdns::engine::Application::handleShortcuts()
+void mdns::engine::Application::handleShortcuts() const
 {
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO const& io = ImGui::GetIO();
+    meta::Settings::AppSettings const& settings = m_settings->getSettings();
 
-    meta::Settings::AppSettings &settings = m_settings->getSettings();
     if (io.KeyCtrl)
     {
         if (ImGui::IsKeyPressed(ImGuiKey_Equal))
@@ -233,6 +259,7 @@ void mdns::engine::Application::run()
         ImGui::NewFrame();
 
         handleShortcuts();
+        sortEntries();
         renderUI();
 
         ImGui::Render();
@@ -245,6 +272,31 @@ void mdns::engine::Application::run()
     }
 }
 
+void mdns::engine::Application::sortEntries()
+{
+    std::lock_guard<std::mutex> lock(m_filtered_services_mutex);
+    m_filtered_services.clear();
+
+    auto const query = toLower(std::string(m_search_buffer.data()));
+    if (query.empty()) {
+        m_filtered_services = m_discovered_services;
+        return;
+    }
+
+    for (auto const& s : m_discovered_services) {
+        if (toLower(s.name).find(query) != std::string::npos) {
+            m_filtered_services.push_back(s);
+        }
+    }
+
+    // std::ranges::sort(
+    //     m_filtered_services,
+    //     [](auto const& a, auto const& b) {
+    //         return a.time_of_arrival > b.time_of_arrival;
+    //     }
+    // );
+}
+
 void mdns::engine::Application::renderUI()
 {
     ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -253,7 +305,7 @@ void mdns::engine::Application::renderUI()
     ImGui::SetNextWindowSize(viewport->Size);
     ImGui::SetNextWindowViewport(viewport->ID);
 
-    ImGuiWindowFlags windowFlags =
+    constexpr ImGuiWindowFlags windowFlags =
         ImGuiWindowFlags_NoTitleBar |
         ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove |
@@ -322,7 +374,7 @@ void mdns::engine::Application::renderUI()
     float offset = (imgH - textH) * 0.5f;
 
     ImGui::Dummy(ImVec2(0.0f, 2.4f));
-    ImGui::Image((ImTextureID)(intptr_t)m_logo_texture, ImVec2(imgH, imgH));
+    ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(m_logo_texture)), ImVec2(imgH, imgH));
     ImGui::SameLine();
 
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offset);
@@ -331,6 +383,7 @@ void mdns::engine::Application::renderUI()
     ImGui::TextUnformatted(m_title.c_str());
     ImGui::SameLine();
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.5f);
     ImGui::TextUnformatted("| Browse for MDNS or Bonjour services via MDNS-SD");
     ImGui::PopStyleColor();
     ImGui::EndGroup();
@@ -346,7 +399,7 @@ void mdns::engine::Application::renderUI()
 void mdns::engine::Application::renderDiscoveryLayout()
 {
     static auto onPingToolClick = [this](std::string const& ip) -> void {
-        m_ping_tool.pingIpAddress(ip);
+        m_ping_tool->pingIpAddress(ip);
         m_open_ping_view = true;
     };
 
@@ -356,41 +409,55 @@ void mdns::engine::Application::renderDiscoveryLayout()
     };
 
     static auto onPingStop = [this]() -> void {
-        m_ping_tool.stopPing();
+        m_ping_tool->stopPing();
         m_open_ping_view = false;
     };
 
-    /*static char searchBuffer[128] = "";
-        ImGui::SetNextItemWidth(250);
-        ImGui::InputTextWithHint("##ServiceSearch", "Search services...", searchBuffer, IM_ARRAYSIZE(searchBuffer));*/
-    // ImGui::SameLine
-
     ImGuiStyle const& style = ImGui::GetStyle();
-    const char* label = m_discovery_running ? " Stop disovery" : " Browse services";
+    const char* label = m_discovery_running ? " Stop discovery" : " Browse services";
     float h           = ImGui::GetFrameHeight() * 1.25f;
     float textW       = ImGui::CalcTextSize(label).x;
     float iconSpace   = h;  
     float btnWidth    = textW + iconSpace + style.FramePadding.x * 4.0f;
     float avail       = ImGui::GetContentRegionAvail().x;
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - (btnWidth + 8.0f));
+    float searchWidth = 350.0f - 16.0f;
 
-    ImVec4 blue  = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
-    ImVec4 red   = ImVec4(0.85f, 0.45f, 0.45f, 1.0f);
+    ImGui::PushStyleVar  (ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar  (ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x, style.FramePadding.y * 2.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1,1,1,0.06f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1,1,1,0.09f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(1,1,1,0.12f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1,1,1,0.10f));
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 3.5f);
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + avail - (btnWidth + 21.0f + searchWidth));
+    ImGui::SetNextItemWidth(searchWidth);
+
+    ImGui::InputTextWithHint("##search", "Filter services", m_search_buffer.data(), m_search_buffer.size());
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar(2);
+
+    ImGui::SameLine();
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - (btnWidth + 8.0f));
+
+    constexpr auto blue = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
+    constexpr auto red  = ImVec4(0.85f, 0.45f, 0.45f, 1.0f);
     mdns::engine::ui::pushThemedButtonStyles(m_discovery_running ? red : blue);
     
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
 
     if (ImGui::Button(label, ImVec2(btnWidth, h))) {
         if (m_discovery_running) {
-            m_mdns_helper.stopBrowse();
+            m_mdns_helper->stopBrowse();
         } else {
-            m_mdns_helper.startBrowse();
+            m_mdns_helper->startBrowse();
         }
     }
 
-    ImVec2 btnMin = ImGui::GetItemRectMin();
-    ImVec2 btnMax = ImGui::GetItemRectMax();
-    ImVec2 center = ImVec2(btnMin.x + h * 0.5f, (btnMin.y + btnMax.y) * 0.5f);
+    auto const btnMin = ImGui::GetItemRectMin();
+    auto const btnMax = ImGui::GetItemRectMax();
+    auto const center = ImVec2(btnMin.x + h * 0.5f, (btnMin.y + btnMax.y) * 0.5f);
 
     if (!m_discovery_running) {
         mdns::engine::ui::renderPlayTriange(h, center);
@@ -406,12 +473,28 @@ void mdns::engine::Application::renderDiscoveryLayout()
     ImGui::BeginGroup();
     ImGui::BeginChild("MainContent", ImVec2(m_open_ping_view ? -810 : 0, 0), false);
 
-    mdns::engine::ui::renderServiceLayout (m_discovered_services, onPingToolClick, onDissectorClick);
+    {
+        std::lock_guard<std::mutex> lock(m_filtered_services_mutex);
+
+        mdns::engine::ui::renderServiceLayout(
+           m_filtered_services,
+           onPingToolClick,
+           onDissectorClick,
+           m_browser_texture,
+           m_info_texture,
+           m_terminal_texture
+       );
+    }
+
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
-    mdns::engine::ui::renderQuestionLayout(m_intercepted_questions);
+
+    {
+        std::lock_guard<std::mutex> lock(m_intercepted_questions_mutex);
+        mdns::engine::ui::renderQuestionLayout(m_intercepted_questions);
+    }
 
     if (m_open_ping_view) {
-        mdns::engine::ui::renderPingTool(m_ping_tool.getStats(), m_ping_tool.getOutput(), onPingStop);
+        mdns::engine::ui::renderPingTool(m_ping_tool->getStats(), m_ping_tool->getOutput(), onPingStop);
     }
 
     ImGui::EndGroup();
@@ -450,14 +533,15 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
             processEntry(rr.name, rr.port, rr.rdata, response.time_of_arrival);
         }
 
+        std::lock_guard<std::mutex> lock(m_intercepted_questions_mutex);
+
         for (auto const& q : response.questions_list) {
             QuestionCardEntry entry{};
             entry.ip_addresses    = {ip};
             entry.name            = q.name;
             entry.time_of_arrival = response.time_of_arrival;
 
-            auto it = std::ranges::find(m_intercepted_questions, entry);
-            if (it == m_intercepted_questions.end()) {
+            if (auto it = std::ranges::find(m_intercepted_questions, entry); it == m_intercepted_questions.end()) {
                 m_intercepted_questions.insert(m_intercepted_questions.begin(), std::move(entry));
 
                 if (m_intercepted_questions.size() > 6) {
@@ -478,19 +562,18 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
         );
 
         if (!anyServiceResolved) {
-            m_mdns_helper.scheduleDiscoveryNow();
+            m_mdns_helper->scheduleDiscoveryNow();
         }
     }
 }
 
 void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvertized)
 {
-    auto const& meta = entry.dissector_meta[0];
-    if (std::holds_alternative<proto::mdns_rr_ptr_ext>(meta)) {
-        m_mdns_helper.addResolveQuery(std::get<proto::mdns_rr_ptr_ext>(meta).target);
+    if (auto const& meta = entry.dissector_meta[0]; std::holds_alternative<proto::mdns_rr_ptr_ext>(meta)) {
+        m_mdns_helper->addResolveQuery(std::get<proto::mdns_rr_ptr_ext>(meta).target);
     }
 
-    auto serviceIt = std::ranges::find(m_discovered_services, entry);
+    auto const serviceIt = std::ranges::find(m_discovered_services, entry);
     if (serviceIt == m_discovered_services.end()) {
         m_discovered_services.insert(m_discovered_services.begin(), std::move(entry));
         return;
@@ -523,13 +606,7 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
         return;
     }
 
-    auto ipIt = std::find(
-        serviceIt->ip_addresses.begin(),
-        serviceIt->ip_addresses.end(),
-        entry.ip_addresses.front()
-    );
-
-    if (ipIt == serviceIt->ip_addresses.end()) {
+    if (auto ipIt = std::ranges::find(serviceIt->ip_addresses, entry.ip_addresses.front()); ipIt == serviceIt->ip_addresses.end()) {
         serviceIt->ip_addresses.push_back(entry.ip_addresses.front());
 
         std::ranges::sort(

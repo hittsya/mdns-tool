@@ -34,7 +34,7 @@ void mdns::MdnsHelper::startBrowse() {
     
     browsing_thread_ = std::jthread(
         [this, connections = std::move(connections)]
-        (std::stop_token stop_token) mutable -> void {
+        (std::stop_token const& stop_token) mutable -> void {
             logger::mdns()->info("Starting continuous mDNS discovery");
             on_browsing_state_changed_(true);
             runDiscovery(stop_token, std::move(connections));
@@ -43,8 +43,7 @@ void mdns::MdnsHelper::startBrowse() {
 
 void mdns::MdnsHelper::addResolveQuery(std::string const& query)
 {
-    auto it = std::find(browsing_queries_.begin(), browsing_queries_.end(), query);
-    if (it == browsing_queries_.end()) {
+    if (auto const it = std::ranges::find(browsing_queries_, query); it == browsing_queries_.end()) {
         logger::mdns()->info("Adding question: " + query);
         browsing_queries_.push_back(query);
     }
@@ -52,8 +51,7 @@ void mdns::MdnsHelper::addResolveQuery(std::string const& query)
 
 void mdns::MdnsHelper::removeResolveQuery(std::string const& query)
 {
-    auto it = std::find(browsing_queries_.begin(), browsing_queries_.end(), query);
-    if (it != browsing_queries_.end()) {
+    if (auto const it = std::ranges::find(browsing_queries_, query); it != browsing_queries_.end()) {
         logger::mdns()->info("Removing question: " + query);
         browsing_queries_.erase(it);
     }
@@ -110,7 +108,7 @@ std::vector<std::uint8_t> mdns::MdnsHelper::buildQuery(std::vector<std::string> 
     return pkt;
 }
 
-void mdns::MdnsHelper::encodeDnsName(std::vector<uint8_t>& out, std::string const& name) const
+void mdns::MdnsHelper::encodeDnsName(std::vector<uint8_t>& out, std::string const& name)
 {
     std::stringstream ss(name);
     std::string label;
@@ -278,9 +276,8 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
     switch (record.type) {
         case mdns::proto::MDNS_RECORDTYPE_PTR: {
             const std::uint8_t* tmp = rdata_start;
-            std::string target;
 
-            if (parseName(tmp, start, end, target)) {
+            if (std::string target; parseName(tmp, start, end, target)) {
                 record.name   = "";
                 record.rdata  = mdns::proto::mdns_rr_ptr_ext{ target };
             }
@@ -429,21 +426,24 @@ mdns::MdnsHelper::parseRR(const std::uint8_t*& ptr, const std::uint8_t* start, c
 }
 
 std::uint16_t
-mdns::MdnsHelper::readU16(const std::uint8_t*& ptr) {
+mdns::MdnsHelper::readU16(const std::uint8_t*& ptr)
+{
     auto const result = ntohs(*reinterpret_cast<const std::uint16_t *>(ptr));
     ptr += sizeof(std::uint16_t);
     return result;
 }
 
 std::uint32_t
-mdns::MdnsHelper::readU32(const std::uint8_t*& ptr) {
+mdns::MdnsHelper::readU32(const std::uint8_t*& ptr)
+{
     auto const result = ntohl(*reinterpret_cast<const std::uint32_t *>(ptr));
     ptr += sizeof(std::uint32_t);
     return result;
 }
 
 std::optional<mdns::proto::mdns_response>
-mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
+mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message)
+{
     auto const& buffer = message.blob;
     
     if (buffer.size() < sizeof(std::uint16_t)*6) {
@@ -510,8 +510,8 @@ mdns::MdnsHelper::parseDiscoveryResponse(proto::mdns_recv_res const& message) {
             }
             
             // If its the MDNS_RECORDTYPE_A/MDNS_RECORDTYPE_AAAA then set the advertised ip
-            std::visit([&](auto&& entry) {
-                using T = std::decay_t<decltype(entry)>;
+            std::visit([&]<typename T0>(T0&& entry) {
+                using T = std::decay_t<T0>;
 
                 if constexpr(std::is_same_v<T, proto::mdns_rr_a_ext> || std::is_same_v<T, proto::mdns_rr_aaaa_ext>) {
                     advertizedIP = entry.address;
