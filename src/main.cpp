@@ -9,6 +9,9 @@ main(int argc, char** argv)
   }
 
   mdns::engine::Application app(1280, 720, buildInfo);
-  app.run();
+  if (app.init()) {
+    app.run();
+  }
+
   return 0;
 }

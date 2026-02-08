@@ -17,6 +17,7 @@ public:
   ~Application();
   void run();
   void onWindowResized(int width, int height);
+  bool init();
 
 private:
   void handleShortcuts() const;
@@ -54,10 +55,10 @@ private:
   std::optional<ScanCardEntry> m_dissector_meta_entry;
 
   bool m_open_ping_view = false;
+  bool m_open_question_view = false;
   bool m_discovery_running = false;
 
   std::array<char, 128> m_search_buffer = { '\0' };
-
   std::vector<ScanCardEntry> m_discovered_services;
 
   std::mutex m_filtered_services_mutex;

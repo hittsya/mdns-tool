@@ -8,11 +8,11 @@
 #define NOMINMAX
 #include <windows.h>
 #else
-#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/wait.h>
-#include <fcntl.h>
-#include <errno.h>
+#include <unistd.h>
 #endif
 
 static bool

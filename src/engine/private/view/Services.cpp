@@ -4,6 +4,8 @@
 #include <style/Window.h>
 #include <view/Services.h>
 
+#include "imgui_internal.h"
+
 static float
 calcServiceCardHeight(std::size_t ipCount)
 {
@@ -37,10 +39,12 @@ void
 mdns::engine::ui::renderServiceLayout(
   std::vector<ScanCardEntry> const& discovered_services,
   std::function<void(std::string const&)> onOpenPingTool,
+  std::function<void()> onQuestionWindowOpen,
   std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
   unsigned int browser_texture,
   unsigned int info_texture,
-  unsigned int terminal_texture)
+  unsigned int terminal_texture,
+  std::vector<std::string> const& questions)
 {
   float availHeight = ImGui::GetContentRegionAvail().y;
   ImGuiStyle const& style = ImGui::GetStyle();
@@ -65,12 +69,6 @@ mdns::engine::ui::renderServiceLayout(
                     false,
                     ImGuiWindowFlags_NoScrollbar);
 
-  // ImDrawList* draw = ImGui::GetWindowDrawList();
-  // ImVec2 p0        = ImGui::GetWindowPos();
-  // ImVec2 p1        = ImVec2(p0.x + ImGui::GetWindowWidth(), p0.y +
-  // ImGui::GetWindowHeight()); draw->AddRectFilled(p0, p1, IM_COL32(60, 70, 85,
-  // 255));
-
   ImGui::Dummy(ImVec2(0.0f, style.FramePadding.y * 3.0f));
   ImGui::Indent(style.FramePadding.x * 4.0f);
   ImGui::SetWindowFontScale(1.1f);
@@ -79,6 +77,47 @@ mdns::engine::ui::renderServiceLayout(
   ImGui::Unindent(style.FramePadding.x * 4.0f);
   ImGui::EndChild();
   ImGui::PopStyleVar(2);
+  ImGui::Indent(18);
+
+  mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+  float avail = ImGui::GetContentRegionAvail().x;
+  float x = 0.0f;
+
+  for (auto const& question : questions) {
+    if (question.starts_with("_")) {
+      continue;
+    }
+
+    ImGui::PushID(&question);
+
+    ImVec2 textSize = ImGui::CalcTextSize(question.data());
+    ImVec2 buttonSize = ImGui::CalcItemSize(
+      ImVec2(textSize.x + ImGui::GetStyle().FramePadding.x * 2,
+             textSize.y + ImGui::GetStyle().FramePadding.y * 2),
+      0.0f,
+      0.0f);
+
+    if (x + buttonSize.x > avail) {
+      ImGui::NewLine();
+      x = 0.0f;
+    }
+
+    if (ImGui::Button(question.data(), buttonSize)) {
+    }
+
+    x += buttonSize.x + ImGui::GetStyle().ItemSpacing.x;
+    ImGui::SameLine(0.0f, ImGui::GetStyle().ItemSpacing.x);
+    ImGui::PopID();
+  }
+  mdns::engine::ui::popThemedButtonStyles();
+
+  mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.55f, 0.57f, 0.60f, 1.0f));
+  if (ImGui::Button("Add question")) {
+    onQuestionWindowOpen();
+  }
+  mdns::engine::ui::popThemedButtonStyles();
+
+  ImGui::Dummy(ImVec2(0.0f, 2.5f));
 
   ImGui::BeginChild(
     "ServicesScroll", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
@@ -91,7 +130,6 @@ mdns::engine::ui::renderServiceLayout(
   cardsPerRow = std::max(1, cardsPerRow);
   float cardWidth = (regionWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
 
-  ImGui::Indent(18);
   for (size_t skipped = 0, i = 0; i < discovered_services.size(); ++i) {
     if (discovered_services[i].name.empty()) {
       ++skipped;

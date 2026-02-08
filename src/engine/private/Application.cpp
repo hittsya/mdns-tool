@@ -14,6 +14,9 @@
 #include <view/Questions.h>
 #include <view/Services.h>
 
+#include <style/Button.h>
+#include <style/Window.h>
+
 #include <images/AppIcon.h>
 #include <images/Browser.h>
 #include <images/Info.h>
@@ -49,10 +52,37 @@ mdns::engine::Application::Application(int const width,
                                        std::string const& buildInfo)
   : m_width(width)
   , m_height(height)
+  , m_title("mDNS Scanner " + buildInfo)
+{}
+
+mdns::engine::Application::~Application()
+{
+  if (m_settings) {
+    m_settings->saveSettings();
+  }
+
+  ImGui_ImplOpenGL3_Shutdown();
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
+  logger::core()->info("ImGUI terminated");
+
+  if (m_window) {
+    glfwDestroyWindow(m_window);
+  }
+
+  glfwTerminate();
+  logger::core()->info("GLFW terminated");
+
+  logger::core()->info("Shutting down logger");
+  logger::shutdown();
+}
+
+bool
+mdns::engine::Application::init()
 {
   logger::init();
   logger::core()->info("Logger initialized");
-  logger::core()->info("Build " + buildInfo);
+  logger::core()->info("Application " + m_title + " is starting");
 
   if (!glfwInit()) {
     logger::core()->error("Failed to initialize GLFW");
@@ -79,8 +109,28 @@ mdns::engine::Application::Application(int const width,
   ImGui::CreateContext();
   ImGui::StyleColorsDark();
 
-  m_settings = std::make_unique<meta::Settings>();
-  logger::core()->info("Settings initialized");
+  try {
+    m_settings = std::make_unique<meta::Settings>();
+    logger::core()->info("Settings initialized");
+
+    m_ping_tool = std::make_unique<PingTool>();
+    logger::core()->info("Ping tool initialized");
+
+    m_mdns_helper = std::make_unique<MdnsHelper>();
+    logger::core()->info("MDNS helper initialized");
+
+    m_mdns_helper->connectOnServiceDiscovered(
+      [this](std::vector<proto::mdns_response>&& responses) -> void {
+        onScanDataReady(std::move(responses));
+      });
+
+    m_mdns_helper->connectOnBrowsingStateChanged(
+      [this](bool enabled) -> void { m_discovery_running = enabled; });
+  } catch (std::bad_alloc const& ex) {
+    logger::core()->error("Failed to initialize backend helpers: " +
+                          std::string(ex.what()));
+    return false;
+  }
 
   float const scale =
     ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
@@ -89,8 +139,6 @@ mdns::engine::Application::Application(int const width,
   m_width = settings.window_width.value_or(static_cast<int>(m_width * scale));
   m_height =
     settings.window_height.value_or(static_cast<int>(m_height * scale));
-
-  m_title = "mDNS Scanner " + buildInfo;
   m_window =
     glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
   if (!m_window) {
@@ -131,36 +179,7 @@ mdns::engine::Application::Application(int const width,
   logger::core()->info("ImGUI initialized");
 
   setUIScalingFactor(m_settings->getSettings().ui_scale_factor.value_or(1.0f));
-
-  m_ping_tool = std::make_unique<PingTool>();
-  m_mdns_helper = std::make_unique<MdnsHelper>();
-
-  m_mdns_helper->connectOnServiceDiscovered(
-    [this](std::vector<proto::mdns_response>&& responses) -> void {
-      onScanDataReady(std::move(responses));
-    });
-
-  m_mdns_helper->connectOnBrowsingStateChanged(
-    [this](bool enabled) -> void { m_discovery_running = enabled; });
-}
-
-mdns::engine::Application::~Application()
-{
-  m_settings->saveSettings();
-
-  ImGui_ImplOpenGL3_Shutdown();
-  ImGui_ImplGlfw_Shutdown();
-  ImGui::DestroyContext();
-
-  logger::core()->info("ImGUI terminated");
-
-  glfwDestroyWindow(m_window);
-  glfwTerminate();
-
-  logger::core()->info("GLFW terminated");
-  logger::core()->info("Shutting down logger");
-
-  logger::shutdown();
+  return true;
 }
 
 void
@@ -408,6 +427,10 @@ mdns::engine::Application::renderDiscoveryLayout()
     m_open_ping_view = true;
   };
 
+  static auto onQuestionWindowOpen = [this]() -> void {
+    m_open_question_view = true;
+  };
+
   static auto onDissectorClick = [this](ScanCardEntry entry) -> void {
     m_show_dissector_meta_window = true;
     m_dissector_meta_entry = entry;
@@ -491,10 +514,12 @@ mdns::engine::Application::renderDiscoveryLayout()
 
     mdns::engine::ui::renderServiceLayout(m_filtered_services,
                                           onPingToolClick,
+                                          onQuestionWindowOpen,
                                           onDissectorClick,
                                           m_browser_texture,
                                           m_info_texture,
-                                          m_terminal_texture);
+                                          m_terminal_texture,
+                                          m_mdns_helper->getResolveQueries());
   }
 
   ImGui::Dummy(ImVec2(0.0f, 3.0f));
@@ -502,6 +527,56 @@ mdns::engine::Application::renderDiscoveryLayout()
   {
     std::lock_guard<std::mutex> lock(m_intercepted_questions_mutex);
     mdns::engine::ui::renderQuestionLayout(m_intercepted_questions);
+  }
+
+  if (m_open_question_view) {
+    mdns::engine::ui::pushThemedWindowStyles();
+    ImGui::Begin("Add custom question",
+                 &m_open_question_view,
+                 ImGuiWindowFlags_AlwaysAutoResize);
+    mdns::engine::ui::popThemedWindowStyles();
+
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(
+      ImGuiStyleVar_FramePadding,
+      ImVec2(style.FramePadding.x, style.FramePadding.y * 2.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(1, 1, 1, 0.06f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(1, 1, 1, 0.09f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(1, 1, 1, 0.12f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1, 1, 1, 0.10f));
+
+    static char buffer[128] = { "\0" };
+    std::string_view text(buffer);
+    bool invalid =
+      text.empty() || !text.ends_with(".local") || text.starts_with("_");
+
+    if (invalid) {
+      ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(255, 80, 80, 255));
+      ImGui::TextUnformatted("Service name must end with .local, and should "
+                             "not start with \"_\" character");
+      ImGui::PopStyleColor();
+    }
+
+    ImGui::SetNextItemWidth(350.0f);
+    ImGui::InputTextWithHint("##serviceAdd", "testservice.local", buffer, 128);
+
+    ImGui::PopStyleColor(4);
+    ImGui::PopStyleVar(2);
+    ImGui::Dummy(ImVec2(0.0f, 2.5f));
+
+    mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+    ImGui::BeginDisabled(invalid);
+
+    if (ImGui::Button("Add custom question")) {
+      m_mdns_helper->addResolveQuery(std::string(buffer));
+      m_open_question_view = false;
+      std::ranges::fill(buffer, 0);
+    }
+
+    ImGui::EndDisabled();
+    mdns::engine::ui::popThemedButtonStyles();
+
+    ImGui::End();
   }
 
   if (m_open_ping_view) {
@@ -561,7 +636,7 @@ mdns::engine::Application::onScanDataReady(
         m_intercepted_questions.insert(m_intercepted_questions.begin(),
                                        std::move(entry));
 
-        if (m_intercepted_questions.size() > 6) {
+        if (m_intercepted_questions.size() > 15) {
           m_intercepted_questions.pop_back();
         }
       }

@@ -8,10 +8,12 @@ void
 renderServiceLayout(
   std::vector<ScanCardEntry> const& discovered_services,
   std::function<void(std::string const&)> onOpenPingTool,
+  std::function<void()> onQuestionWindowOpen,
   std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
   unsigned int browser_texture,
   unsigned int info_texture,
-  unsigned int terminal_texture);
+  unsigned int terminal_texture,
+  std::vector<std::string> const& questions);
 
 void
 renderServiceCard(int index,

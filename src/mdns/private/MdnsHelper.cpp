@@ -53,6 +53,12 @@ mdns::MdnsHelper::addResolveQuery(std::string const& query)
   }
 }
 
+std::vector<std::string> const&
+mdns::MdnsHelper::getResolveQueries() const
+{
+  return browsing_queries_;
+}
+
 void
 mdns::MdnsHelper::removeResolveQuery(std::string const& query)
 {

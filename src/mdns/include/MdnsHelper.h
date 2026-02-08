@@ -28,6 +28,7 @@ public:
   void connectOnBrowsingStateChanged(browse_en_cb cb);
   void addResolveQuery(std::string const& query);
   void removeResolveQuery(std::string const& query);
+  [[nodiscard]] std::vector<std::string> const& getResolveQueries() const;
 
 private:
   void runDiscovery(std::stop_token const& stop_token,
