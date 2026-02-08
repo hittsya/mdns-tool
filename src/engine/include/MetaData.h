@@ -14,7 +14,8 @@ v1.0.0
 
 )";
 
-inline constexpr const char* GITHUB_URL = "https://github.com/hittsya/mdns-tool";
+inline constexpr const char* GITHUB_URL =
+  "https://github.com/hittsya/mdns-tool";
 
 }
 

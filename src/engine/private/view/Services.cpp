@@ -1,343 +1,367 @@
-#include <view/Services.h>
-#include <style/Button.h>
-#include <style/Window.h>
 #include <Util.h>
 #include <imgui.h>
+#include <style/Button.h>
+#include <style/Window.h>
+#include <view/Services.h>
 
-static float calcServiceCardHeight(std::size_t ipCount)
+static float
+calcServiceCardHeight(std::size_t ipCount)
 {
-    ImGuiStyle const &style = ImGui::GetStyle();
-    ImGuiIO const &io = ImGui::GetIO();
+  ImGuiStyle const& style = ImGui::GetStyle();
+  ImGuiIO const& io = ImGui::GetIO();
 
-    const float line = ImGui::GetTextLineHeight();
-    const float spacing = style.ItemSpacing.y;
-    const float padding = style.WindowPadding.y * 2.0f;
-    const float frame = style.FramePadding.y * 2.0f;
+  const float line = ImGui::GetTextLineHeight();
+  const float spacing = style.ItemSpacing.y;
+  const float padding = style.WindowPadding.y * 2.0f;
+  const float frame = style.FramePadding.y * 2.0f;
 
-    float height = 0.0f;
-    height += line * 1.1f + spacing;
-    height += 4.0f;
-    height += line + spacing;
-    height += 3.0f;
-    height += line;
-    height += ipCount * (line + spacing);
-    height += 3.0f;
-    height += line + spacing;
-    height += 3.0f;
-    height += line + spacing;
-    height += 8.0f;
-    height += ImGui::GetFrameHeight() + spacing;
-    height += padding + frame;
+  float height = 0.0f;
+  height += line * 1.1f + spacing;
+  height += 4.0f;
+  height += line + spacing;
+  height += 3.0f;
+  height += line;
+  height += ipCount * (line + spacing);
+  height += 3.0f;
+  height += line + spacing;
+  height += 3.0f;
+  height += line + spacing;
+  height += 8.0f;
+  height += ImGui::GetFrameHeight() + spacing;
+  height += padding + frame;
 
-    return height;
+  return height;
 }
 
-void mdns::engine::ui::renderServiceLayout(
-    std::vector<ScanCardEntry> const& discovered_services,
-    std::function<void(std::string const&)> onOpenPingTool,
-    std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
-    unsigned int browser_texture,
-    unsigned int info_texture,
-    unsigned int terminal_texture
-) {
-    float availHeight = ImGui::GetContentRegionAvail().y;
-    ImGuiStyle const& style = ImGui::GetStyle();
+void
+mdns::engine::ui::renderServiceLayout(
+  std::vector<ScanCardEntry> const& discovered_services,
+  std::function<void(std::string const&)> onOpenPingTool,
+  std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
+  unsigned int browser_texture,
+  unsigned int info_texture,
+  unsigned int terminal_texture)
+{
+  float availHeight = ImGui::GetContentRegionAvail().y;
+  ImGuiStyle const& style = ImGui::GetStyle();
 
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13f, 0.14f, 0.16f, 1.0f));
-    ImGui::BeginChild("ServicesChild", ImVec2(0, availHeight * 0.75f), true);
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(2);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
+  ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.13f, 0.14f, 0.16f, 1.0f));
+  ImGui::BeginChild("ServicesChild", ImVec2(0, availHeight * 0.75f), true);
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar(2);
 
-    ImGuiIO const& io = ImGui::GetIO();
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(style.ItemSpacing.x, style.ItemSpacing.y));
+  ImGuiIO const& io = ImGui::GetIO();
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+  ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing,
+                      ImVec2(style.ItemSpacing.x, style.ItemSpacing.y));
 
-    float headerHeight = ImGui::GetTextLineHeight() + style.ItemSpacing.y + style.FramePadding.y * 8.0f;
-    ImGui::BeginChild("ServicesHeader", ImVec2(0, headerHeight), false, ImGuiWindowFlags_NoScrollbar);
+  float headerHeight = ImGui::GetTextLineHeight() + style.ItemSpacing.y +
+                       style.FramePadding.y * 8.0f;
+  ImGui::BeginChild("ServicesHeader",
+                    ImVec2(0, headerHeight),
+                    false,
+                    ImGuiWindowFlags_NoScrollbar);
 
-    // ImDrawList* draw = ImGui::GetWindowDrawList();
-    // ImVec2 p0        = ImGui::GetWindowPos();
-    // ImVec2 p1        = ImVec2(p0.x + ImGui::GetWindowWidth(), p0.y + ImGui::GetWindowHeight());
-    // draw->AddRectFilled(p0, p1, IM_COL32(60, 70, 85, 255));
+  // ImDrawList* draw = ImGui::GetWindowDrawList();
+  // ImVec2 p0        = ImGui::GetWindowPos();
+  // ImVec2 p1        = ImVec2(p0.x + ImGui::GetWindowWidth(), p0.y +
+  // ImGui::GetWindowHeight()); draw->AddRectFilled(p0, p1, IM_COL32(60, 70, 85,
+  // 255));
 
-    ImGui::Dummy          (ImVec2(0.0f, style.FramePadding.y * 3.0f));
-    ImGui::Indent         (style.FramePadding.x * 4.0f);
-    ImGui::SetWindowFontScale(1.1f);
-    ImGui::TextUnformatted("Discovered Services");
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::Unindent       (style.FramePadding.x * 4.0f);
-    ImGui::EndChild();
-    ImGui::PopStyleVar(2);
+  ImGui::Dummy(ImVec2(0.0f, style.FramePadding.y * 3.0f));
+  ImGui::Indent(style.FramePadding.x * 4.0f);
+  ImGui::SetWindowFontScale(1.1f);
+  ImGui::TextUnformatted("Discovered Services");
+  ImGui::SetWindowFontScale(1.0f);
+  ImGui::Unindent(style.FramePadding.x * 4.0f);
+  ImGui::EndChild();
+  ImGui::PopStyleVar(2);
 
-    ImGui::BeginChild("ServicesScroll", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
-    
-    float regionWidth  = ImGui::GetContentRegionAvail().x;
-    float minCardWidth = 875.0f;
-    float spacing      = ImGui::GetStyle().ItemSpacing.x * 4;
+  ImGui::BeginChild(
+    "ServicesScroll", ImVec2(0, 0), false, ImGuiWindowFlags_NoScrollbar);
 
-    int cardsPerRow = (int)(regionWidth / (minCardWidth + spacing));
-    cardsPerRow     = std::max(1, cardsPerRow);
-    float cardWidth = (regionWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
+  float regionWidth = ImGui::GetContentRegionAvail().x;
+  float minCardWidth = 875.0f;
+  float spacing = ImGui::GetStyle().ItemSpacing.x * 4;
 
-    ImGui::Indent(18);
-    for (size_t skipped = 0, i = 0; i < discovered_services.size(); ++i) {
-        if (discovered_services[i].name.empty()) {
-            ++skipped;
-            continue;
-        }
+  int cardsPerRow = (int)(regionWidth / (minCardWidth + spacing));
+  cardsPerRow = std::max(1, cardsPerRow);
+  float cardWidth = (regionWidth - (cardsPerRow - 1) * spacing) / cardsPerRow;
 
-        auto const index = i - skipped;
-        renderServiceCard(
-            static_cast<int>(index),
-            discovered_services[i],
-            cardWidth,
-            onOpenPingTool,
-            onOpenDissectorMeta,
-            browser_texture,
-            info_texture,
-            terminal_texture
-        );
-
-        if ((index + 1) % cardsPerRow != 0) {
-            ImGui::SameLine();
-        } else {
-            ImGui::Dummy(ImVec2(0.0f, 3.5f));
-        }
+  ImGui::Indent(18);
+  for (size_t skipped = 0, i = 0; i < discovered_services.size(); ++i) {
+    if (discovered_services[i].name.empty()) {
+      ++skipped;
+      continue;
     }
-    ImGui::Unindent(18);
 
-    ImGui::EndChild();
-    ImGui::EndChild();
+    auto const index = i - skipped;
+    renderServiceCard(static_cast<int>(index),
+                      discovered_services[i],
+                      cardWidth,
+                      onOpenPingTool,
+                      onOpenDissectorMeta,
+                      browser_texture,
+                      info_texture,
+                      terminal_texture);
+
+    if ((index + 1) % cardsPerRow != 0) {
+      ImGui::SameLine();
+    } else {
+      ImGui::Dummy(ImVec2(0.0f, 3.5f));
+    }
+  }
+  ImGui::Unindent(18);
+
+  ImGui::EndChild();
+  ImGui::EndChild();
 }
 
-void mdns::engine::ui::renderServiceCard(
-    int index,
-    ScanCardEntry const& entry,
-    float cardWidth,
-    std::function<void(std::string const&)> onOpenPingTool,
-    std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
-    unsigned int browser_texture,
-    unsigned int info_texture,
-    unsigned int terminal_texture
-) {
-    auto const height = calcServiceCardHeight(entry.ip_addresses.size());
+void
+mdns::engine::ui::renderServiceCard(
+  int index,
+  ScanCardEntry const& entry,
+  float cardWidth,
+  std::function<void(std::string const&)> onOpenPingTool,
+  std::function<void(ScanCardEntry entry)> onOpenDissectorMeta,
+  unsigned int browser_texture,
+  unsigned int info_texture,
+  unsigned int terminal_texture)
+{
+  auto const height = calcServiceCardHeight(entry.ip_addresses.size());
 
-    ImGui::PushID(index);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(16.0f, ImGui::GetStyle().WindowPadding.y));
-    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0,0,0,0));
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.18f, 0.19f, 0.22f, 1.0f));
-    ImGui::BeginChild("ServiceCard", ImVec2(cardWidth, height), true, ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);    
-    ImGui::PopStyleColor(2);
-    ImGui::PopStyleVar(3);
+  ImGui::PushID(index);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 16.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 0.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,
+                      ImVec2(16.0f, ImGui::GetStyle().WindowPadding.y));
+  ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
+  ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.18f, 0.19f, 0.22f, 1.0f));
+  ImGui::BeginChild("ServiceCard",
+                    ImVec2(cardWidth, height),
+                    true,
+                    ImGuiWindowFlags_NoScrollbar | ImGuiChildFlags_AutoResizeY);
+  ImGui::PopStyleColor(2);
+  ImGui::PopStyleVar(3);
 
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
-    ImGui::SetWindowFontScale(1.1f);
+  ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
+  ImGui::SetWindowFontScale(1.1f);
 
-    float textWidth         = ImGui::CalcTextSize(entry.name.c_str()).x;
-    auto const nameStripped = mdns::engine::util::stripMdnsServicePostfix(entry.name);
-    ImVec2 textSize         = ImGui::CalcTextSize(nameStripped.c_str());
+  float textWidth = ImGui::CalcTextSize(entry.name.c_str()).x;
+  auto const nameStripped =
+    mdns::engine::util::stripMdnsServicePostfix(entry.name);
+  ImVec2 textSize = ImGui::CalcTextSize(nameStripped.c_str());
 
-    ImGui::Dummy(ImVec2(0.0f, 5.0f));
-    ImGui::Indent(21);
+  ImGui::Dummy(ImVec2(0.0f, 5.0f));
+  ImGui::Indent(21);
 
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - textSize.x) * 0.5f);
-    ImGui::TextUnformatted(nameStripped.c_str());
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                       (ImGui::GetContentRegionAvail().x - textSize.x) * 0.5f);
+  ImGui::TextUnformatted(nameStripped.c_str());
 
-    ImGui::SetWindowFontScale(1.0f);
-    ImGui::PopStyleVar();
-    ImGui::Dummy(ImVec2(0.0f, 4.0f));
+  ImGui::SetWindowFontScale(1.0f);
+  ImGui::PopStyleVar();
+  ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    ImGui::Text("Hostname:");
-    ImGui::SameLine(250);
-    ImGui::Text("%s", entry.name.c_str());
+  ImGui::Text("Hostname:");
+  ImGui::SameLine(250);
+  ImGui::Text("%s", entry.name.c_str());
 
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-    ImGui::Text("IP Address(es):");
-    ImGui::SameLine(250);
-    ImGui::Indent(228);
+  ImGui::Dummy(ImVec2(0.0f, 3.0f));
+  ImGui::Text("IP Address(es):");
+  ImGui::SameLine(250);
+  ImGui::Indent(228);
 
-    mdns::engine::ui::pushThemedPopupStyles();
-    for (auto const &ipAddr : entry.ip_addresses)
-    {
-        ImGui::PushID(ipAddr.c_str());
+  mdns::engine::ui::pushThemedPopupStyles();
+  for (auto const& ipAddr : entry.ip_addresses) {
+    ImGui::PushID(ipAddr.c_str());
 
-        if (ImGui::Selectable(ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
-            ImGui::OpenPopup("ip_actions_popup");
-        }
-
-        mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-        if (ImGui::BeginPopup("ip_actions_popup"))
-        {
-            ImGui::Text     ("IP: %s", ipAddr.c_str());
-            ImGui::Separator();
-
-            if (ImGui::Button("Ping")) {   
-                onOpenPingTool(ipAddr);
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-
-            if (ImGui::Button("Open in browser")) {
-                std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
-
-                url += "://";
-                url += ipAddr;
-
-                if (entry.port != mdns::proto::port) {
-                    url += ":" + std::to_string(entry.port);
-                }
-
-                mdns::engine::util::openInBrowser(url);
-            }
-            
-            ImGui::SameLine();
-            
-            auto const port = entry.name.find("_ssh") != std::string::npos ? entry.port: 22;
-            if (ImGui::Button(fmt::format("SSH root@{}:{}", ipAddr, port).c_str())) {
-                mdns::engine::util::openShellAndSSH(ipAddr, "root", port);
-            }
-
-            ImGui::EndPopup();
-        }
-        mdns::engine::ui::popThemedButtonStyles();
-
-        ImGui::PopID();
+    if (ImGui::Selectable(
+          ipAddr.c_str(), false, ImGuiSelectableFlags_SpanAllColumns)) {
+      ImGui::OpenPopup("ip_actions_popup");
     }
-    mdns::engine::ui::popThemedPopupStyles();
-
-    ImGui::Unindent(228);
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-
-    ImGui::Text("Port:");
-    ImGui::SameLine(250);
-    ImGui::Text("%d", entry.port);
-
-    ImGui::Dummy(ImVec2(0.0f, 3.0f));
-    ImGui::Text("Last update:");
-    ImGui::SameLine(250);
-    
-    auto now = std::chrono::steady_clock::now();
-    auto age = duration_cast<std::chrono::seconds>(now - entry.time_of_arrival).count();
-
-    ImVec4 color;
-    if (age <= 10)      color = ImVec4(0.2f, 0.9f, 0.2f, 1.0f);
-    else if (age <= 15) color = ImVec4(0.95f, 0.8f, 0.2f, 1.0f);
-    else                color = ImVec4(0.95f, 0.2f, 0.2f, 1.0f);
-
-    char buf[64];
-    if (age < 60) {
-        std::snprintf(buf, sizeof(buf), "%ld seconds ago", age);
-    }
-    else if (age < 3600) {
-        std::snprintf(buf, sizeof(buf), "%ld minutes ago", age / 60);
-    }
-    else {
-        std::snprintf(buf, sizeof(buf), "%ld hours ago", age / 3600);
-    }
-
-    ImGui::TextColored(color, "%s", buf);
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
-
-    auto const ssh  = entry.name.find("_ssh") != std::string::npos;
-    auto const port = ssh ? entry.port: 22;
-    auto const name = mdns::engine::util::stripMdnsServicePostfix(entry.name);
-
-    ImGuiStyle const& style = ImGui::GetStyle();
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x * 0.6f, style.FramePadding.y));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
 
     mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
-    {
-        const char* label = "  Open in browser";
-        ImVec2 textSize2  = ImGui::CalcTextSize(label);
-        float iconSize    = ImGui::GetTextLineHeight();
-        float pad         = ImGui::GetStyle().FramePadding.x;
-        ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2, iconSize + ImGui::GetStyle().FramePadding.y * 4);
+    if (ImGui::BeginPopup("ip_actions_popup")) {
+      ImGui::Text("IP: %s", ipAddr.c_str());
+      ImGui::Separator();
 
-        if (ImGui::Button(label, btnSize)) {
-            std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
+      if (ImGui::Button("Ping")) {
+        onOpenPingTool(ipAddr);
+        ImGui::CloseCurrentPopup();
+      }
+      ImGui::SameLine();
 
-            url += "://";
-            url += name;
+      if (ImGui::Button("Open in browser")) {
+        std::string url =
+          entry.name.find("https") != std::string::npos ? "https" : "http";
 
-            if (entry.port != mdns::proto::port) {
-                url += ":" + std::to_string(entry.port);
-            }
+        url += "://";
+        url += ipAddr;
 
-            mdns::engine::util::openInBrowser(url);
+        if (entry.port != mdns::proto::port) {
+          url += ":" + std::to_string(entry.port);
         }
 
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        ImVec2 min = ImGui::GetItemRectMin();
-        ImVec2 max = ImGui::GetItemRectMax();
+        mdns::engine::util::openInBrowser(url);
+      }
 
-        ImVec2 iconPos = ImVec2(
-            min.x + pad  + 3.0f,
-            min.y + (btnSize.y - iconSize) * 0.5f
-        );
-        draw->AddImage((ImTextureID)(intptr_t)browser_texture, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
+      ImGui::SameLine();
+
+      auto const port =
+        entry.name.find("_ssh") != std::string::npos ? entry.port : 22;
+      if (ImGui::Button(fmt::format("SSH root@{}:{}", ipAddr, port).c_str())) {
+        mdns::engine::util::openShellAndSSH(ipAddr, "root", port);
+      }
+
+      ImGui::EndPopup();
     }
-
-    ImGui::SameLine();
-    {
-        std::string labelStr = fmt::format("  SSH root@{}", name);
-        ImVec2 textSize2     = ImGui::CalcTextSize(labelStr.c_str());
-        float iconSize       = ImGui::GetTextLineHeight();
-        float pad            = ImGui::GetStyle().FramePadding.x;
-        ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2, iconSize + ImGui::GetStyle().FramePadding.y * 4);
-
-        if (ImGui::Button(labelStr.c_str(), btnSize)) {
-            mdns::engine::util::openShellAndSSH(name, "root", port);
-        }
-
-        ImDrawList* draw = ImGui::GetWindowDrawList();
-        ImVec2 min = ImGui::GetItemRectMin();
-        ImVec2 max = ImGui::GetItemRectMax();
-
-        ImVec2 iconPos = ImVec2(
-            min.x + pad + 3.0f,
-            min.y + (btnSize.y - iconSize) * 0.5f
-        );
-        draw->AddImage((ImTextureID)(intptr_t)terminal_texture, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
-    }
-
-    ImGui::SameLine();
-
-    mdns::engine::ui::popThemedButtonStyles();
-    mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.55f, 0.57f, 0.60f, 1.0f));
-
-    {
-        const char* label    = "Metadata";
-        ImVec2 textSize2     = ImGui::CalcTextSize(label);
-        float iconSize       = ImGui::GetTextLineHeight() ;
-        float pad            = ImGui::GetStyle().FramePadding.x;
-        ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2, iconSize + ImGui::GetStyle().FramePadding.y * 4);
-
-        if (ImGui::Button(label, btnSize)) {
-            onOpenDissectorMeta(entry);
-        }
-        //
-        // ImDrawList* draw = ImGui::GetWindowDrawList();
-        // ImVec2 min = ImGui::GetItemRectMin();
-        // ImVec2 max = ImGui::GetItemRectMax();
-        //
-        // ImVec2 iconPos = ImVec2(
-        //     min.x + pad,
-        //     min.y + (btnSize.y - iconSize) * 0.5f
-        // );
-        // draw->AddImage((ImTextureID)(intptr_t)info_texture, iconPos, ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
-    }
-
     mdns::engine::ui::popThemedButtonStyles();
 
-    ImGui::PopStyleVar(3);
-    ImGui::Unindent(21);
-    ImGui::EndChild();
     ImGui::PopID();
+  }
+  mdns::engine::ui::popThemedPopupStyles();
+
+  ImGui::Unindent(228);
+  ImGui::Dummy(ImVec2(0.0f, 3.0f));
+
+  ImGui::Text("Port:");
+  ImGui::SameLine(250);
+  ImGui::Text("%d", entry.port);
+
+  ImGui::Dummy(ImVec2(0.0f, 3.0f));
+  ImGui::Text("Last update:");
+  ImGui::SameLine(250);
+
+  auto now = std::chrono::steady_clock::now();
+  auto age =
+    duration_cast<std::chrono::seconds>(now - entry.time_of_arrival).count();
+
+  ImVec4 color;
+  if (age <= 10)
+    color = ImVec4(0.2f, 0.9f, 0.2f, 1.0f);
+  else if (age <= 15)
+    color = ImVec4(0.95f, 0.8f, 0.2f, 1.0f);
+  else
+    color = ImVec4(0.95f, 0.2f, 0.2f, 1.0f);
+
+  char buf[64];
+  if (age < 60) {
+    std::snprintf(buf, sizeof(buf), "%ld seconds ago", age);
+  } else if (age < 3600) {
+    std::snprintf(buf, sizeof(buf), "%ld minutes ago", age / 60);
+  } else {
+    std::snprintf(buf, sizeof(buf), "%ld hours ago", age / 3600);
+  }
+
+  ImGui::TextColored(color, "%s", buf);
+  ImGui::Dummy(ImVec2(0.0f, 8.0f));
+
+  auto const ssh = entry.name.find("_ssh") != std::string::npos;
+  auto const port = ssh ? entry.port : 22;
+  auto const name = mdns::engine::util::stripMdnsServicePostfix(entry.name);
+
+  ImGuiStyle const& style = ImGui::GetStyle();
+  ImGui::PushStyleVar(
+    ImGuiStyleVar_FramePadding,
+    ImVec2(style.FramePadding.x * 0.6f, style.FramePadding.y));
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+  ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
+  mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
+  {
+    const char* label = "  Open in browser";
+    ImVec2 textSize2 = ImGui::CalcTextSize(label);
+    float iconSize = ImGui::GetTextLineHeight();
+    float pad = ImGui::GetStyle().FramePadding.x;
+    ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2,
+                   iconSize + ImGui::GetStyle().FramePadding.y * 4);
+
+    if (ImGui::Button(label, btnSize)) {
+      std::string url =
+        entry.name.find("https") != std::string::npos ? "https" : "http";
+
+      url += "://";
+      url += name;
+
+      if (entry.port != mdns::proto::port) {
+        url += ":" + std::to_string(entry.port);
+      }
+
+      mdns::engine::util::openInBrowser(url);
+    }
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    ImVec2 min = ImGui::GetItemRectMin();
+    ImVec2 max = ImGui::GetItemRectMax();
+
+    ImVec2 iconPos =
+      ImVec2(min.x + pad + 3.0f, min.y + (btnSize.y - iconSize) * 0.5f);
+    draw->AddImage((ImTextureID)(intptr_t)browser_texture,
+                   iconPos,
+                   ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
+  }
+
+  ImGui::SameLine();
+  {
+    std::string labelStr = fmt::format("  SSH root@{}", name);
+    ImVec2 textSize2 = ImGui::CalcTextSize(labelStr.c_str());
+    float iconSize = ImGui::GetTextLineHeight();
+    float pad = ImGui::GetStyle().FramePadding.x;
+    ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2,
+                   iconSize + ImGui::GetStyle().FramePadding.y * 4);
+
+    if (ImGui::Button(labelStr.c_str(), btnSize)) {
+      mdns::engine::util::openShellAndSSH(name, "root", port);
+    }
+
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    ImVec2 min = ImGui::GetItemRectMin();
+    ImVec2 max = ImGui::GetItemRectMax();
+
+    ImVec2 iconPos =
+      ImVec2(min.x + pad + 3.0f, min.y + (btnSize.y - iconSize) * 0.5f);
+    draw->AddImage((ImTextureID)(intptr_t)terminal_texture,
+                   iconPos,
+                   ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
+  }
+
+  ImGui::SameLine();
+
+  mdns::engine::ui::popThemedButtonStyles();
+  mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.55f, 0.57f, 0.60f, 1.0f));
+
+  {
+    const char* label = "Metadata";
+    ImVec2 textSize2 = ImGui::CalcTextSize(label);
+    float iconSize = ImGui::GetTextLineHeight();
+    float pad = ImGui::GetStyle().FramePadding.x;
+    ImVec2 btnSize(iconSize + pad + textSize2.x + pad * 2,
+                   iconSize + ImGui::GetStyle().FramePadding.y * 4);
+
+    if (ImGui::Button(label, btnSize)) {
+      onOpenDissectorMeta(entry);
+    }
+    //
+    // ImDrawList* draw = ImGui::GetWindowDrawList();
+    // ImVec2 min = ImGui::GetItemRectMin();
+    // ImVec2 max = ImGui::GetItemRectMax();
+    //
+    // ImVec2 iconPos = ImVec2(
+    //     min.x + pad,
+    //     min.y + (btnSize.y - iconSize) * 0.5f
+    // );
+    // draw->AddImage((ImTextureID)(intptr_t)info_texture, iconPos,
+    // ImVec2(iconPos.x + iconSize, iconPos.y + iconSize));
+  }
+
+  mdns::engine::ui::popThemedButtonStyles();
+
+  ImGui::PopStyleVar(3);
+  ImGui::Unindent(21);
+  ImGui::EndChild();
+  ImGui::PopID();
 }

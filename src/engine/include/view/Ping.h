@@ -1,9 +1,11 @@
-#include <Types.h>
 #include <Ping46.h>
-#include <vector>
+#include <Types.h>
 #include <functional>
+#include <vector>
 
-namespace mdns::engine::ui
-{
-    void renderPingTool(PingTool::PingStats const& stats, std::string const& stdout, std::function<void()> onStop);
+namespace mdns::engine::ui {
+void
+renderPingTool(PingTool::PingStats const& stats,
+               std::string const& stdout,
+               std::function<void()> onStop);
 }

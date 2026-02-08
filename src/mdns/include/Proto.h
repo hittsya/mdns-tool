@@ -1,214 +1,325 @@
 #ifndef PROTO_H
 #define PROTO_H
 
-#include <vector>
-#include <string>
 #include <chrono>
+#include <string>
 #include <variant>
+#include <vector>
 
 namespace mdns::proto {
 
-static constexpr int port             = 5353;
+static constexpr int port = 5353;
 static constexpr int unicast_response = 0x8000U;
-static constexpr int cache_flush      = 0x8000U;
+static constexpr int cache_flush = 0x8000U;
 
-struct mdns_recv_res {
-    std::string       ip_addr_str;
-    std::uint16_t     port;
-    std::vector<char> blob;
+struct mdns_recv_res
+{
+  std::string ip_addr_str;
+  std::uint16_t port;
+  std::vector<char> blob;
 };
 
-struct mdns_question {
-    std::string name;
-    uint16_t    type;
-    uint16_t    clazz;
+struct mdns_question
+{
+  std::string name;
+  uint16_t type;
+  uint16_t clazz;
 };
 
-struct mdns_rr_ptr_ext {
-    std::string target;
-    bool operator==(const mdns_rr_ptr_ext& rhs) const {
-        return target == rhs.target;
-    }
+struct mdns_rr_ptr_ext
+{
+  std::string target;
+  bool operator==(const mdns_rr_ptr_ext& rhs) const
+  {
+    return target == rhs.target;
+  }
 };
 
-struct mdns_rr_txt_ext {
-    std::vector<std::string> entries;
+struct mdns_rr_txt_ext
+{
+  std::vector<std::string> entries;
 
-    bool operator==(const mdns_rr_txt_ext& rhs) const {
-        return entries == rhs.entries;
-    }
+  bool operator==(const mdns_rr_txt_ext& rhs) const
+  {
+    return entries == rhs.entries;
+  }
 };
 
-struct mdns_rr_srv_ext {
-    std::uint16_t priority;
-    std::uint16_t weight;
-    std::uint16_t port;
-    std::string   target;
+struct mdns_rr_srv_ext
+{
+  std::uint16_t priority;
+  std::uint16_t weight;
+  std::uint16_t port;
+  std::string target;
 
-    bool operator==(const mdns_rr_srv_ext& rhs) const {
-        return priority == rhs.priority &&
-               weight   == rhs.weight &&
-               port     == rhs.port &&
-               target   == rhs.target;
-    }
+  bool operator==(const mdns_rr_srv_ext& rhs) const
+  {
+    return priority == rhs.priority && weight == rhs.weight &&
+           port == rhs.port && target == rhs.target;
+  }
 };
 
-struct mdns_rr_a_ext {
-    std::string address;
+struct mdns_rr_a_ext
+{
+  std::string address;
 
-    bool operator==(const mdns_rr_a_ext& rhs) const {
-        return address == rhs.address;
-    }
+  bool operator==(const mdns_rr_a_ext& rhs) const
+  {
+    return address == rhs.address;
+  }
 };
 
-struct mdns_rr_aaaa_ext {
-    std::string address;
+struct mdns_rr_aaaa_ext
+{
+  std::string address;
 
-    bool operator==(const mdns_rr_aaaa_ext& rhs) const {
-        return address == rhs.address;
-    }
+  bool operator==(const mdns_rr_aaaa_ext& rhs) const
+  {
+    return address == rhs.address;
+  }
 };
 
-struct mdns_rr_nsec_ext {
-    std::string           next_domain;
-    std::vector<uint16_t> types;
+struct mdns_rr_nsec_ext
+{
+  std::string next_domain;
+  std::vector<uint16_t> types;
 
-    bool operator==(const mdns_rr_nsec_ext& rhs) const {
-        return next_domain == rhs.next_domain && types == rhs.types;
-    }
+  bool operator==(const mdns_rr_nsec_ext& rhs) const
+  {
+    return next_domain == rhs.next_domain && types == rhs.types;
+  }
 };
 
-struct mdns_rr_unknown_ext {
-    std::vector<std::uint8_t> raw;
+struct mdns_rr_unknown_ext
+{
+  std::vector<std::uint8_t> raw;
 
-    bool operator==(const mdns_rr_unknown_ext& rhs) const {
-        return raw == rhs.raw;
-    }
+  bool operator==(const mdns_rr_unknown_ext& rhs) const
+  {
+    return raw == rhs.raw;
+  }
 };
 
-using mdns_rdata = std::variant<
-    mdns_rr_ptr_ext,
-    mdns_rr_txt_ext,
-    mdns_rr_srv_ext,
-    mdns_rr_a_ext,
-    mdns_rr_aaaa_ext,
-    mdns_rr_nsec_ext,
-    mdns_rr_unknown_ext
->;
+using mdns_rdata = std::variant<mdns_rr_ptr_ext,
+                                mdns_rr_txt_ext,
+                                mdns_rr_srv_ext,
+                                mdns_rr_a_ext,
+                                mdns_rr_aaaa_ext,
+                                mdns_rr_nsec_ext,
+                                mdns_rr_unknown_ext>;
 
-struct mdns_rr {
-    std::string    name;
-    std::uint16_t  type;
-    std::uint16_t  clazz;
-    std::uint32_t  ttl;
-	std::uint16_t  port;
-    mdns_rdata     rdata;
+struct mdns_rr
+{
+  std::string name;
+  std::uint16_t type;
+  std::uint16_t clazz;
+  std::uint32_t ttl;
+  std::uint16_t port;
+  mdns_rdata rdata;
 };
 
-struct mdns_response {
-    std::uint16_t query_id;
-    std::uint16_t flags;
-    std::uint16_t questions;
+struct mdns_response
+{
+  std::uint16_t query_id;
+  std::uint16_t flags;
+  std::uint16_t questions;
 
-    std::vector<mdns_rr>       answer_rrs;
-    std::vector<mdns_rr>       additional_rrs;
-    std::vector<mdns_rr>       authority_rrs;
-    std::vector<mdns_question> questions_list;
-    std::vector<uint8_t>       packet;
+  std::vector<mdns_rr> answer_rrs;
+  std::vector<mdns_rr> additional_rrs;
+  std::vector<mdns_rr> authority_rrs;
+  std::vector<mdns_question> questions_list;
+  std::vector<uint8_t> packet;
 
-    std::string                           ip_addr_str;
-    std::string                           advertized_ip_addr_str;
-    std::uint16_t                         port;
-    std::chrono::steady_clock::time_point time_of_arrival;
+  std::string ip_addr_str;
+  std::string advertized_ip_addr_str;
+  std::uint16_t port;
+  std::chrono::steady_clock::time_point time_of_arrival;
 
-    const uint8_t* packet_start() const {
-        return packet.data();
-    }
+  const uint8_t* packet_start() const { return packet.data(); }
 
-    const uint8_t* packet_end() const {
-        return packet.data() + packet.size();
-    }
+  const uint8_t* packet_end() const { return packet.data() + packet.size(); }
 };
 
-enum mdns_record_type {
-    MDNS_RECORDTYPE_IGNORE = 0,
-    // Address
-    MDNS_RECORDTYPE_A = 1,
-    // Domain Name pointer
-    MDNS_RECORDTYPE_PTR = 12,
-    // Arbitrary text string
-    MDNS_RECORDTYPE_TXT = 16,
-    // IP6 Address [Thomson]
-    MDNS_RECORDTYPE_AAAA = 28,
-    // Server Selection [RFC2782]
-    MDNS_RECORDTYPE_SRV = 33,
-    MDNS_RECORDTYPE_NSEC = 47,
+enum mdns_record_type
+{
+  MDNS_RECORDTYPE_IGNORE = 0,
+  // Address
+  MDNS_RECORDTYPE_A = 1,
+  // Domain Name pointer
+  MDNS_RECORDTYPE_PTR = 12,
+  // Arbitrary text string
+  MDNS_RECORDTYPE_TXT = 16,
+  // IP6 Address [Thomson]
+  MDNS_RECORDTYPE_AAAA = 28,
+  // Server Selection [RFC2782]
+  MDNS_RECORDTYPE_SRV = 33,
+  MDNS_RECORDTYPE_NSEC = 47,
 };
 
-enum mdns_entry_type {
-    MDNS_ENTRYTYPE_QUESTION = 0,
-    MDNS_ENTRYTYPE_ANSWER = 1,
-    MDNS_ENTRYTYPE_AUTHORITY = 2,
-    MDNS_ENTRYTYPE_ADDITIONAL = 3
+enum mdns_entry_type
+{
+  MDNS_ENTRYTYPE_QUESTION = 0,
+  MDNS_ENTRYTYPE_ANSWER = 1,
+  MDNS_ENTRYTYPE_AUTHORITY = 2,
+  MDNS_ENTRYTYPE_ADDITIONAL = 3
 };
 
-enum mdns_class { MDNS_CLASS_IN = 1 };
+enum mdns_class
+{
+  MDNS_CLASS_IN = 1
+};
 
 static constexpr uint8_t mdns_multi_query[] = {
-    // Transaction ID
-    0x00, 0x00,
+  // Transaction ID
+  0x00,
+  0x00,
 
-    // Flags (standard query)
-    0x00, 0x00,
+  // Flags (standard query)
+  0x00,
+  0x00,
 
-    // QDCOUNT = 5 questions
-    0x00, 0x05,
+  // QDCOUNT = 5 questions
+  0x00,
+  0x05,
 
-    // ANCOUNT, NSCOUNT, ARCOUNT
-    0x00, 0x00,
-    0x00, 0x00,
-    0x00, 0x00,
+  // ANCOUNT, NSCOUNT, ARCOUNT
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
+  0x00,
 
-    // _services._dns-sd._udp.local.
-    0x09,'_','s','e','r','v','i','c','e','s',
-    0x07,'_','d','n','s','-','s','d',
-    0x04,'_','u','d','p',
-    0x05,'l','o','c','a','l',
-    0x00,
-    0x00, MDNS_RECORDTYPE_PTR,
-    0x00, MDNS_CLASS_IN,
+  // _services._dns-sd._udp.local.
+  0x09,
+  '_',
+  's',
+  'e',
+  'r',
+  'v',
+  'i',
+  'c',
+  'e',
+  's',
+  0x07,
+  '_',
+  'd',
+  'n',
+  's',
+  '-',
+  's',
+  'd',
+  0x04,
+  '_',
+  'u',
+  'd',
+  'p',
+  0x05,
+  'l',
+  'o',
+  'c',
+  'a',
+  'l',
+  0x00,
+  0x00,
+  MDNS_RECORDTYPE_PTR,
+  0x00,
+  MDNS_CLASS_IN,
 
-    // _http._tcp.local.
-    0x05,'_','h','t','t','p',
-    0x04,'_','t','c','p',
-    0x05,'l','o','c','a','l',
-    0x00,
-    0x00, MDNS_RECORDTYPE_PTR,
-    0x00, MDNS_CLASS_IN,
-    
-    // _https._tcp.local.
-    0x06,'_','h','t','t','p','s',
-    0x04,'_','t','c','p',
-    0x05,'l','o','c','a','l',
-    0x00,
-    0x00, MDNS_RECORDTYPE_PTR,
-    0x00, MDNS_CLASS_IN,
+  // _http._tcp.local.
+  0x05,
+  '_',
+  'h',
+  't',
+  't',
+  'p',
+  0x04,
+  '_',
+  't',
+  'c',
+  'p',
+  0x05,
+  'l',
+  'o',
+  'c',
+  'a',
+  'l',
+  0x00,
+  0x00,
+  MDNS_RECORDTYPE_PTR,
+  0x00,
+  MDNS_CLASS_IN,
 
-    // _ssh._tcp.local.
-    0x04,'_','s','s','h',
-    0x04,'_','t','c','p',
-    0x05,'l','o','c','a','l',
-    0x00,
-    0x00, MDNS_RECORDTYPE_PTR,
-    0x00, MDNS_CLASS_IN,
+  // _https._tcp.local.
+  0x06,
+  '_',
+  'h',
+  't',
+  't',
+  'p',
+  's',
+  0x04,
+  '_',
+  't',
+  'c',
+  'p',
+  0x05,
+  'l',
+  'o',
+  'c',
+  'a',
+  'l',
+  0x00,
+  0x00,
+  MDNS_RECORDTYPE_PTR,
+  0x00,
+  MDNS_CLASS_IN,
 
-    // _ftp._tcp.local.
-    0x04,'_','f','t','p',
-    0x04,'_','t','c','p',
-    0x05,'l','o','c','a','l',
-    0x00,
-    0x00, MDNS_RECORDTYPE_PTR,
-    0x00, MDNS_CLASS_IN,
+  // _ssh._tcp.local.
+  0x04,
+  '_',
+  's',
+  's',
+  'h',
+  0x04,
+  '_',
+  't',
+  'c',
+  'p',
+  0x05,
+  'l',
+  'o',
+  'c',
+  'a',
+  'l',
+  0x00,
+  0x00,
+  MDNS_RECORDTYPE_PTR,
+  0x00,
+  MDNS_CLASS_IN,
+
+  // _ftp._tcp.local.
+  0x04,
+  '_',
+  'f',
+  't',
+  'p',
+  0x04,
+  '_',
+  't',
+  'c',
+  'p',
+  0x05,
+  'l',
+  'o',
+  'c',
+  'a',
+  'l',
+  0x00,
+  0x00,
+  MDNS_RECORDTYPE_PTR,
+  0x00,
+  MDNS_CLASS_IN,
 };
 
 }
