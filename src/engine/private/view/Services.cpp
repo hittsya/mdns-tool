@@ -6,6 +6,11 @@
 
 #include "imgui_internal.h"
 
+#ifdef _WIN32
+#undef max
+#undef min
+#endif
+
 static float
 calcServiceCardHeight(std::size_t ipCount)
 {

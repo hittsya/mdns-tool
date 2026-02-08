@@ -1,3 +1,6 @@
+#ifndef SERVICES_H
+#define SERVICES_H
+
 #include <Types.h>
 
 #include <functional>
@@ -25,3 +28,5 @@ renderServiceCard(int index,
                   unsigned int info_texture,
                   unsigned int terminal_texture);
 }
+
+#endif // SERVICES_H

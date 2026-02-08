@@ -14,6 +14,7 @@ target_compile_features(mdns_listener PRIVATE cxx_std_20)
 
 if (WIN32)
     target_link_libraries(mdns_listener PRIVATE ws2_32 iphlpapi)
+    add_compile_options(/EHsc)
 endif()
 
 find_package(Git QUIET)

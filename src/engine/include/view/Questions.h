@@ -1,3 +1,6 @@
+#ifndef QUESTIONS_H
+#define QUESTIONS_H
+
 #include <Types.h>
 #include <chrono>
 #include <vector>
@@ -12,3 +15,5 @@ renderQuestionCard(int index,
                    std::string ipAddrs,
                    std::chrono::steady_clock::time_point const& toa);
 }
+
+#endif // QUESTIONS_H

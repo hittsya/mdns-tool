@@ -7,6 +7,8 @@
 #include <Settings.h>
 #include <Types.h>
 #include <imgui.h>
+#include <array>
+#include <mutex>
 
 namespace mdns::engine {
 
