@@ -13,6 +13,8 @@ target_sources(MDNS_Engine
             ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Ping.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Questions.cpp
             ${CMAKE_CURRENT_SOURCE_DIR}/private/view/Services.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/style/Button.cpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/private/style/Window.cpp
 )
 
 target_include_directories(MDNS_Engine

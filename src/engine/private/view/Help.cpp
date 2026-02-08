@@ -1,19 +1,28 @@
 #include <view/Help.h>
-#include <ChangeLog.h>
+#include <style/Window.h>
+
+#include <MetaData.h>
 #include <imgui.h>
 
-void mdns::engine::ui::renderChangelogWindow(bool* show) {
+void mdns::engine::ui::renderChangelogWindow(bool* show)
+{
+    mdns::engine::ui::pushThemedWindowStyles();
     ImGui::Begin("Changelog", show, ImGuiWindowFlags_AlwaysAutoResize);
+    mdns::engine::ui::popThemedWindowStyles();
+
     ImGui::Text(mdns::meta::CHANGELOG);
     ImGui::End();
 }
 
-void mdns::engine::ui::renderHelpWindow(bool* show, const char* title) {
+void mdns::engine::ui::renderHelpWindow(bool* show, const char* title)
+{
+    mdns::engine::ui::pushThemedWindowStyles();
     ImGui::Begin("Help", show, ImGuiWindowFlags_AlwaysAutoResize);
+    mdns::engine::ui::popThemedWindowStyles();
 
     auto center_text = [](const char *text) {
         float window_width = ImGui::GetWindowSize().x;
-        float text_width = ImGui::CalcTextSize(text).x;
+        float text_width   = ImGui::CalcTextSize(text).x;
         ImGui::SetCursorPosX((window_width - text_width) * 0.5f);
         ImGui::TextUnformatted(text);
     };
@@ -23,15 +32,14 @@ void mdns::engine::ui::renderHelpWindow(bool* show, const char* title) {
     ImGui::Separator();
     ImGui::Spacing();
 
-    const char *github_url = "https://github.com/hittsya/mdns-tool";
     center_text("Source code:");
     ImGui::Spacing();
 
-    float link_width = ImGui::CalcTextSize(github_url).x;
+    float link_width = ImGui::CalcTextSize(mdns::meta::GITHUB_URL).x;
     ImGui::SetCursorPosX((ImGui::GetWindowSize().x - link_width) * 0.5f);
 
-    if (ImGui::Selectable(github_url, false)) {
-        ImGui::SetClipboardText(github_url);
+    if (ImGui::Selectable(mdns::meta::GITHUB_URL, false)) {
+        ImGui::SetClipboardText(mdns::meta::GITHUB_URL);
     }
 
     ImGui::Spacing();

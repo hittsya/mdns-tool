@@ -1,4 +1,6 @@
 #include <view/Services.h>
+#include <style/Button.h>
+#include <style/Window.h>
 #include <Util.h>
 #include <imgui.h>
 
@@ -134,6 +136,7 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     ImGui::SameLine(250);
     ImGui::Indent(228);
 
+    mdns::engine::ui::pushThemedPopupStyles();
     for (auto const &ipAddr : entry.ip_addresses)
     {
         ImGui::PushID(ipAddr.c_str());
@@ -142,6 +145,7 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
             ImGui::OpenPopup("ip_actions_popup");
         }
 
+        mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
         if (ImGui::BeginPopup("ip_actions_popup"))
         {
             ImGui::Text     ("IP: %s", ipAddr.c_str());
@@ -175,9 +179,11 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
 
             ImGui::EndPopup();
         }
+        mdns::engine::ui::popThemedButtonStyles();
 
         ImGui::PopID();
     }
+    mdns::engine::ui::popThemedPopupStyles();
 
     ImGui::Unindent(228);
     ImGui::Dummy(ImVec2(0.0f, 3.0f));
@@ -210,13 +216,18 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     }
 
     ImGui::TextColored(color, "%s", buf);
-    ImGui::Unindent(21);
-
     ImGui::Dummy(ImVec2(0.0f, 8.0f));
 
     auto const ssh  = entry.name.find("_ssh") != std::string::npos;
     auto const port = ssh ? entry.port: 22;
     auto const name = mdns::engine::util::stripMdnsServicePostfix(entry.name);
+
+    ImGuiStyle const& style = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x * 0.6f, style.FramePadding.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
+
+    mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.26f, 0.59f, 0.98f, 1.0f));
 
     if (ImGui::Button("Open in browser")) {
         std::string url = entry.name.find("https") != std::string::npos ? "https" : "http";
@@ -232,25 +243,24 @@ void mdns::engine::ui::renderServiceCard(int index, ScanCardEntry const& entry, 
     }
 
     ImGui::SameLine();
+
     if (ImGui::Button(fmt::format("SSH root@{}:{}", name, port).c_str())) {
         mdns::engine::util::openShellAndSSH(name, "root", port);
     }
 
     ImGui::SameLine();
-    ImVec4 bg = ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
-    ImVec4 bg_hover = ImVec4(0.70f, 0.70f, 0.70f, 1.0f);
-    ImVec4 bg_active = ImVec4(0.65f, 0.65f, 0.65f, 1.0f);
 
-    ImGui::PushStyleColor(ImGuiCol_Button, bg);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bg_hover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, bg_active);
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.05f, 0.05f, 0.05f, 1.0f));
+    mdns::engine::ui::popThemedButtonStyles();
+    mdns::engine::ui::pushThemedButtonStyles(ImVec4(0.75f, 0.75f, 0.75f, 1.0f));
 
     if (ImGui::Button("Dissector metadata")) {
         onOpenDissectorMeta(entry);
     }
 
-    ImGui::PopStyleColor(4);
+    mdns::engine::ui::popThemedButtonStyles();
+
+    ImGui::PopStyleVar(3);
+    ImGui::Unindent(21);
     ImGui::EndChild();
     ImGui::PopID();
 }

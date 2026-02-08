@@ -14,16 +14,14 @@
 #include <view/Services.h>
 #include <view/Ping.h>
 
+#include <style/Button.h>
 #include <Util.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
 #include <AppIcon.h>
-#include <AppLogo.h>
-
 #include <Logger.h>
-#include <ChangeLog.h>
 
 #if defined(WIN32)
 #include "windows.h"
@@ -163,11 +161,10 @@ void mdns::engine::Application::onWindowResized(int width, int height)
     settings.window_width = width;
 }
 
-void mdns::engine::Application::setUIScalingFactor(float newFactor)
+void mdns::engine::Application::setUIScalingFactor(float newFactor) const
 {
     newFactor = std::clamp(newFactor, 0.75f, 2.0f);
 
-    ImGuiIO &io = ImGui::GetIO();
     ImGui::GetStyle() = m_base_style;
     ImGui::GetStyle().ScaleAllSizes(newFactor);
     ImGui::GetStyle().FontScaleDpi = newFactor;
@@ -379,21 +376,7 @@ void mdns::engine::Application::renderDiscoveryLayout()
 
     ImVec4 blue  = ImVec4(0.26f, 0.59f, 0.98f, 1.0f);
     ImVec4 red   = ImVec4(0.85f, 0.45f, 0.45f, 1.0f);
-    ImVec4 base  = m_discovery_running ? red : blue;
-
-    ImVec4 btn      = ImVec4(base.x, base.y, base.z, 0.85f);
-    ImVec4 btnHover = ImVec4(base.x + 0.05f, base.y + 0.05f, base.z + 0.05f, 0.95f);
-    ImVec4 btnActive= ImVec4(base.x - 0.05f, base.y - 0.05f, base.z - 0.05f, 1.0f);
-    ImVec4 border   = ImVec4(1, 1, 1, 0.10f);
-
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(style.FramePadding.x * 0.6f, style.FramePadding.y));
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 1.0f);
-
-    ImGui::PushStyleColor(ImGuiCol_Button, btn);
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, btnHover);
-    ImGui::PushStyleColor(ImGuiCol_ButtonActive, btnActive);
-    ImGui::PushStyleColor(ImGuiCol_Border, border);
+    mdns::engine::ui::pushThemedButtonStyles(m_discovery_running ? red : blue);
     
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
 
@@ -405,39 +388,18 @@ void mdns::engine::Application::renderDiscoveryLayout()
         }
     }
 
-    ImVec2 btnMin    = ImGui::GetItemRectMin();
-    ImVec2 btnMax    = ImGui::GetItemRectMax();
-    ImVec2 center    = ImVec2(btnMin.x + h * 0.5f, (btnMin.y + btnMax.y) * 0.5f);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
+    ImVec2 btnMin = ImGui::GetItemRectMin();
+    ImVec2 btnMax = ImGui::GetItemRectMax();
+    ImVec2 center = ImVec2(btnMin.x + h * 0.5f, (btnMin.y + btnMax.y) * 0.5f);
 
     if (!m_discovery_running) {
-        float r = h * 0.22f;
-        draw->AddTriangleFilled(
-            ImVec2(center.x - r * 0.6f, center.y - r),
-            ImVec2(center.x - r * 0.6f, center.y + r),
-            ImVec2(center.x + r, center.y),
-            IM_COL32(255, 255, 255, 255)
-        );
+        mdns::engine::ui::renderPlayTriange(h, center);
     }
     else {
-        float radius    = h * 0.22f;
-        float thickness = radius * 0.35f;
-
-        float time  = ImGui::GetTime();
-        float a_min = time * 6.0f;
-        float a_max = a_min + IM_PI * 1.5f;
-
-        draw->PathClear();
-        for (int i = 0; i <= 24; i++) {
-            float a = a_min + (i / 24.0f) * (a_max - a_min);
-            draw->PathLineTo(ImVec2(center.x + cosf(a) * radius, center.y + sinf(a) * radius));
-        }
-
-        draw->PathStroke(IM_COL32(255,255,255,255), false, thickness);
+        mdns::engine::ui::renderLoadingSpinner(h, center);
     }
 
-    ImGui::PopStyleColor(4);
-    ImGui::PopStyleVar(3);
+    mdns::engine::ui::popThemedButtonStyles();
 
     ImGui::Dummy(ImVec2(0.0f, 0.15f));
 
@@ -494,7 +456,7 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
             entry.name            = q.name;
             entry.time_of_arrival = response.time_of_arrival;
 
-            auto it = std::find(m_intercepted_questions.begin(), m_intercepted_questions.end(), entry);
+            auto it = std::ranges::find(m_intercepted_questions, entry);
             if (it == m_intercepted_questions.end()) {
                 m_intercepted_questions.insert(m_intercepted_questions.begin(), std::move(entry));
 
@@ -502,6 +464,21 @@ void mdns::engine::Application::onScanDataReady(std::vector<proto::mdns_response
                     m_intercepted_questions.pop_back();
                 }
             }
+        }
+    }
+
+    // Special case when at start we received only mDNS pointers and we
+    // want to immediately resolve services
+    if (!m_discovered_services.empty()) {
+        auto const anyServiceResolved = std::ranges::any_of(
+            m_discovered_services,
+            [](ScanCardEntry const& entry) -> bool {
+                return !entry.name.empty();
+            }
+        );
+
+        if (!anyServiceResolved) {
+            m_mdns_helper.scheduleDiscoveryNow();
         }
     }
 }
@@ -513,15 +490,14 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
         m_mdns_helper.addResolveQuery(std::get<proto::mdns_rr_ptr_ext>(meta).target);
     }
 
-    auto serviceIt = std::find(m_discovered_services.begin(), m_discovered_services.end(), entry);
+    auto serviceIt = std::ranges::find(m_discovered_services, entry);
     if (serviceIt == m_discovered_services.end()) {
         m_discovered_services.insert(m_discovered_services.begin(), std::move(entry));
         return;
     }
 
-    bool exists = std::any_of(
-        serviceIt->dissector_meta.begin(),
-        serviceIt->dissector_meta.end(),
+    auto const exists = std::ranges::any_of(
+        serviceIt->dissector_meta,
         [&](const proto::mdns_rdata &rr) -> bool {
             return rr == entry.dissector_meta.front();
         }
@@ -533,7 +509,6 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
 
     if (serviceIt->port == mdns::proto::port && serviceIt->port != entry.port) {
         // Handle case where SRV record with port appeared after all records
-        // TODO: Weight?
         serviceIt->port = entry.port;
     }
 
@@ -557,18 +532,18 @@ void mdns::engine::Application::tryAddService(ScanCardEntry entry, bool isAdvert
     if (ipIt == serviceIt->ip_addresses.end()) {
         serviceIt->ip_addresses.push_back(entry.ip_addresses.front());
 
-        std::sort(
-            serviceIt->ip_addresses.begin(),
-            serviceIt->ip_addresses.end(),
-            [](std::string const &a, std::string const &b) -> bool {
-                const bool a4 = a.find(':') == std::string::npos;
-                const bool b4 = b.find(':') == std::string::npos;
+        std::ranges::sort(
+          serviceIt->ip_addresses,
+          [](std::string const &a, std::string const &b) -> bool {
+              const bool a4 = a.find(':') == std::string::npos;
+              const bool b4 = b.find(':') == std::string::npos;
 
-                if (a4 != b4) {
-                    return a4;
-                }
+              if (a4 != b4) {
+                  return a4;
+              }
 
-                return a < b;
-            });
+              return a < b;
+          }
+        );
     }
 }

@@ -79,9 +79,6 @@ void mdns::engine::ui::renderQuestionCard(int index, std::string const &name, st
     ImGui::Dummy(ImVec2(0.0f, 5.0f));
     ImGui::Indent(21);
 
-    float windowWidth = ImGui::GetContentRegionAvail().x;
-    float textWidth = ImGui::CalcTextSize(name.c_str()).x;
-
     ImGui::SetWindowFontScale(1.0f);
     ImGui::PopStyleVar();
 
@@ -103,8 +100,8 @@ void mdns::engine::ui::renderQuestionCard(int index, std::string const &name, st
     ImGui::SameLine();
     ImGui::Text("? -- via %s", ipAddrs.c_str());
 
-    auto now = std::chrono::steady_clock::now();
-    auto age = duration_cast<std::chrono::seconds>(now - toa).count();
+    auto const now = std::chrono::steady_clock::now();
+    auto const age = duration_cast<std::chrono::seconds>(now - toa).count();
 
     char buf[64];
     if (age < 60) {

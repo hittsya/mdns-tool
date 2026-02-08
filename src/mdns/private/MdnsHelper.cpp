@@ -124,15 +124,19 @@ void mdns::MdnsHelper::encodeDnsName(std::vector<uint8_t>& out, std::string cons
 }
 
 void
-mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t>&& sockets)
+mdns::MdnsHelper::scheduleDiscoveryNow()
 {
-    const auto query_interval = std::chrono::milliseconds(2500);
-    auto last_query_time      = std::chrono::steady_clock::now() - query_interval;
+    logger::mdns()->info("Reseting last query timer. Will send query at the next iteration");
+    last_query_time_  = std::chrono::steady_clock::now() - query_interval_;
+}
+
+void
+mdns::MdnsHelper::runDiscovery(std::stop_token const& stop_token, std::vector<sock_fd_t>&& sockets)
+{
+    scheduleDiscoveryNow();
 
     while(!stop_token.stop_requested()) {
-        auto now = std::chrono::steady_clock::now();
-        
-        if (now - last_query_time >= query_interval) {
+        if (auto now = std::chrono::steady_clock::now(); now - last_query_time_ >= query_interval_) {
             auto const query = buildQuery(browsing_queries_);
 
             for (auto const socket: sockets) {
@@ -140,17 +144,15 @@ mdns::MdnsHelper::runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t
                 impl_->send_multicast(socket, query.data(), query.size());
             }
 
-            last_query_time = now;
+            last_query_time_ = now;
         }
 
         std::vector<proto::mdns_response> result;
 
-        auto const messages = impl_->receive_discovery(sockets);
-        for (auto const& message: messages) {
+        for (auto const messages = impl_->receive_discovery(sockets); auto const& message: messages) {
             logger::mdns()->trace("Processing multicast (" + std::to_string(message.blob.size()) + " bytes)");
 
-            auto const parsed = parseDiscoveryResponse(message);
-            if (parsed.has_value()) {
+            if (auto const parsed = parseDiscoveryResponse(message); parsed.has_value()) {
                 result.push_back(parsed.value());
             } else {
                 logger::mdns()->warn("Multicast processing failed");

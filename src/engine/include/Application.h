@@ -26,7 +26,7 @@ private:
     void onScanDataReady(std::vector<proto::mdns_response>&& responses);
     void renderUI();
     void renderDiscoveryLayout();
-    void setUIScalingFactor(float scalingFactor);
+    void setUIScalingFactor(float scalingFactor) const;
 private:
     int                               m_width;
     int                               m_height;

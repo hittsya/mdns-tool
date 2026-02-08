@@ -23,12 +23,13 @@ public:
     ~MdnsHelper();
     void startBrowse();
     void stopBrowse ();
+    void scheduleDiscoveryNow();
     void connectOnServiceDiscovered(service_dicovered_cb cb);
     void connectOnBrowsingStateChanged(browse_en_cb cb);
     void addResolveQuery(std::string const& query);
     void removeResolveQuery(std::string const& query);
 private:
-    void runDiscovery(std::stop_token stop_token, std::vector<sock_fd_t>&& sockets);
+    void runDiscovery(std::stop_token const& stop_token, std::vector<sock_fd_t>&& sockets);
     std::optional<proto::mdns_response> parseDiscoveryResponse(proto::mdns_recv_res const& message);
     const std::uint8_t* parseName(const std::uint8_t*& ptr, const  std::uint8_t *start, const std::uint8_t *end, std::string& out);
     proto::mdns_rr parseRR(const std::uint8_t*& ptr, const std::uint8_t *start, const std::uint8_t *end);
@@ -43,9 +44,12 @@ private:
     service_dicovered_cb on_service_discovered_     {[](std::vector<proto::mdns_response>&&){}};
     browse_en_cb         on_browsing_state_changed_ {[](bool){}};
 
-    std::jthread              browsing_thread_;
-    std::atomic<bool>         browsing_ {false};
-    std::vector<std::string>  browsing_queries_ {"_services._dns-sd._udp.local."};
+    std::chrono::steady_clock::time_point   last_query_time_;
+    std::chrono::milliseconds               query_interval_ {std::chrono::milliseconds(2500)};
+
+    std::jthread                            browsing_thread_;
+    std::atomic<bool>                       browsing_ {false};
+    std::vector<std::string>                browsing_queries_ {"_services._dns-sd._udp.local."};
 };
 
 }
