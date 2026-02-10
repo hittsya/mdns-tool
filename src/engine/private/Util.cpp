@@ -117,3 +117,13 @@ mdns::engine::util::stripMdnsServicePostfix(std::string const& name)
 
   return name.substr(0, first) + name.substr(domain);
 }
+
+std::string
+mdns::engine::util::stripMdnsServicePrefix(const std::string& name)
+{
+  size_t pos = name.find("._");
+  if (pos == std::string::npos)
+    return name;
+
+  return name.substr(pos + 1);
+}

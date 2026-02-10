@@ -1,13 +1,13 @@
-#include <view/Ping.h>
 #include <imgui.h>
 #include <limits>
+#include <view/Ping.h>
 
 #ifdef _WIN32
-    #ifdef stdout
-    #pragma push_macro("stdout")
-    #undef stdout
-    #define RESTORE_STDOUT_MACRO
-    #endif
+#ifdef stdout
+#pragma push_macro("stdout")
+#undef stdout
+#define RESTORE_STDOUT_MACRO
+#endif
 #endif
 
 void
@@ -53,6 +53,7 @@ mdns::engine::ui::renderPingTool(PingTool::PingStats const& stats,
   if (ImGui::Button("X##ClosePing")) {
     onStop();
   }
+
   ImGui::PopStyleColor(4);
   ImGui::PopStyleVar();
   ImGui::Dummy(ImVec2(0.0f, style.FramePadding.y * 0.5f));
@@ -122,6 +123,6 @@ mdns::engine::ui::renderPingTool(PingTool::PingStats const& stats,
 }
 
 #ifdef RESTORE_STDOUT_MACRO
-    #pragma pop_macro("stdout")
-    #undef RESTORE_STDOUT_MACRO
+#pragma pop_macro("stdout")
+#undef RESTORE_STDOUT_MACRO
 #endif

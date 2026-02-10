@@ -5,15 +5,15 @@
 #include <Types.h>
 
 #ifdef _WIN32
-    #ifdef stdout
-    #pragma push_macro("stdout")
-    #undef stdout
-    #define RESTORE_STDOUT_MACRO
-    #endif
+#ifdef stdout
+#pragma push_macro("stdout")
+#undef stdout
+#define RESTORE_STDOUT_MACRO
+#endif
 #endif
 
-#include <vector>
 #include <functional>
+#include <vector>
 
 namespace mdns::engine::ui {
 void
@@ -23,8 +23,8 @@ renderPingTool(PingTool::PingStats const& stats,
 }
 
 #ifdef RESTORE_STDOUT_MACRO
-    #pragma pop_macro("stdout")
-    #undef RESTORE_STDOUT_MACRO
+#pragma pop_macro("stdout")
+#undef RESTORE_STDOUT_MACRO
 #endif
 
-#endif //PING_H
+#endif // PING_H

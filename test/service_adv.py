@@ -9,6 +9,7 @@ addr = socket.inet_aton(ip)
 services = [
     ServiceInfo("_http._tcp.local.", "WebServer-1._http._tcp.local.", addresses=[addr], port=8080),
     ServiceInfo("_http._tcp.local.", "WebServer-2._http._tcp.local.", addresses=[addr], port=8081),
+    ServiceInfo("_http._tcp.local.", "VeryLargeName" + "X"*50 + "._http._tcp.local.", addresses=[addr], port=8083),
     ServiceInfo("_https._tcp.local.", "SecureWeb._https._tcp.local.", addresses=[addr], port=8443),
     ServiceInfo("_printer._tcp.local.", "OfficePrinter._printer._tcp.local.", addresses=[addr], port=9100),
     ServiceInfo("_ssh._tcp.local.", "DevMachine._ssh._tcp.local.", addresses=[addr], port=22),
