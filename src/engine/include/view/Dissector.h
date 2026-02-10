@@ -10,4 +10,4 @@ renderDissectorWindow(std::optional<ScanCardEntry> const& dissector_meta_entry,
                       bool* show);
 }
 
-#endif //DISSECTOR_H
+#endif // DISSECTOR_H

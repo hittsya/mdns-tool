@@ -201,14 +201,15 @@ mdns::engine::ui::renderServiceCard(
   ImGui::Indent(21);
 
   std::string nameSliced = entry.name;
-  if (nameSliced.size() > 45){
+  if (nameSliced.size() > 45) {
     nameSliced = nameSliced.substr(0, 45) + "...";
   }
 
   auto const nameStripped = util::stripMdnsServicePostfix(nameSliced);
   ImVec2 textSize = ImGui::CalcTextSize(nameStripped.c_str());
 
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - textSize.x) * 0.5f);
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
+                       (ImGui::GetContentRegionAvail().x - textSize.x) * 0.5f);
   ImGui::TextUnformatted(nameStripped.c_str());
 
   ImGui::SetWindowFontScale(1.0f);
@@ -226,7 +227,6 @@ mdns::engine::ui::renderServiceCard(
   ImGui::Text("%s", util::stripMdnsServicePrefix(entry.name).c_str());
 
   ImGui::Dummy(ImVec2(0.0f, 3.0f));
-
 
   ImGui::Text("IP Address(es):");
   ImGui::SameLine(250);
