@@ -1,4 +1,17 @@
-﻿#include <Application.h>
+﻿#ifdef WIN32
+
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include "windows.h"
+#include "dwmapi.h"
+
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
+#endif
+
+#include <Application.h>
 #include <Ping46.h>
 
 #include <algorithm>
@@ -29,10 +42,6 @@
 #include <stb_image.h>
 
 #include <Logger.h>
-
-#if defined(WIN32)
-#include "windows.h"
-#endif
 
 #if defined(__APPLE__)
 #define GL_SILENCE_DEPRECATION
@@ -162,6 +171,22 @@ mdns::engine::Application::init()
     });
 
   glfwMakeContextCurrent(m_window);
+
+#ifdef WIN32
+  ImVec4 c = ImGui::GetStyle().Colors[ImGuiCol_MenuBarBg];
+  
+  auto lift = [](float v) { return powf(v, 1.0f / 1.025f); };
+
+  COLORREF captionColor = RGB((int)(lift(c.x) * 255.0f),
+                              (int)(lift(c.y) * 255.0f),
+                              (int)(lift(c.z) * 255.0f));
+
+  HWND hwnd = glfwGetWin32Window(m_window);
+  DwmSetWindowAttribute(
+    hwnd, DWMWA_CAPTION_COLOR, &captionColor, sizeof(captionColor));
+  DwmSetWindowAttribute(
+    hwnd, DWMWA_BORDER_COLOR, &captionColor, sizeof(captionColor));
+#endif
 
   loadAppIcon();
 
@@ -395,20 +420,27 @@ mdns::engine::Application::renderUI()
   float offset = (imgH - textH) * 0.5f;
 
   ImGui::Dummy(ImVec2(0.0f, 2.4f));
-  ImGui::Image(static_cast<ImTextureID>(static_cast<intptr_t>(m_logo_texture)),
-               ImVec2(imgH, imgH));
-  ImGui::SameLine();
-
-  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offset);
-
   ImGui::BeginGroup();
-  ImGui::TextUnformatted(m_title.c_str());
-  ImGui::SameLine();
-  ImGui::PushStyleColor(ImGuiCol_Text,
-                        ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.5f);
-  ImGui::TextUnformatted("| Browse for MDNS or Bonjour services via MDNS-SD");
-  ImGui::PopStyleColor();
+
+  if (ImGui::GetWindowSize().x > 950.0f) {
+    ImGui::Image(
+      static_cast<ImTextureID>(static_cast<intptr_t>(m_logo_texture)),
+      ImVec2(imgH, imgH));
+    ImGui::SameLine();
+
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + offset);
+    ImGui::TextUnformatted(m_title.c_str());
+  }
+
+  if (ImGui::GetWindowSize().x > 1450.0f) {
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.5f);
+    ImGui::TextUnformatted("| Browse for MDNS or Bonjour services via MDNS-SD");
+    ImGui::PopStyleColor();
+  }
+
   ImGui::EndGroup();
 
   ImGui::SameLine();

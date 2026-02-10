@@ -1,10 +1,12 @@
 #ifdef WIN32
 
 #define WIN32_LEAN_AND_MEAN
-#include <iphlpapi.h>
-#include <windows.h>
-#include <winsock2.h>
+#define NOMINMAX
+
+#include <winsock2.h> 
 #include <ws2tcpip.h>
+#include <windows.h>
+#include <iphlpapi.h>
 
 #include <Logger.h>
 #include <MdnsHelper.h>

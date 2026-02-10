@@ -10,6 +10,11 @@ target_sources(MDNS_Helper
         ${CMAKE_CURRENT_SOURCE_DIR}/private/MdnsWindowsImpl.cpp
 )
 
+if (WIN32)
+    target_link_libraries(mdns_listener PRIVATE ws2_32 iphlpapi dwmapi)
+    add_compile_options(/EHsc)
+endif()
+
 target_include_directories(MDNS_Helper
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
