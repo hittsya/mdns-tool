@@ -46,13 +46,14 @@ mdns::engine::ui::renderPingTool(PingTool::PingStats const& stats,
   ImVec4 cardBg = ImVec4(0.13f, 0.14f, 0.16f, 1.0f);
   ImGui::PushStyleColor(ImGuiCol_Button, cardBg);
   ImGui::PushStyleColor(
-    ImGuiCol_ButtonHovered,
+  ImGuiCol_ButtonHovered,
     ImVec4(cardBg.x + 0.05f, cardBg.y + 0.05f, cardBg.z + 0.05f, 1.0f));
   ImGui::PushStyleColor(ImGuiCol_ButtonActive, cardBg);
   ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(0, 0, 0, 0));
   if (ImGui::Button("X##ClosePing")) {
     onStop();
   }
+
   ImGui::PopStyleColor(4);
   ImGui::PopStyleVar();
   ImGui::Dummy(ImVec2(0.0f, style.FramePadding.y * 0.5f));
@@ -67,8 +68,7 @@ mdns::engine::ui::renderPingTool(PingTool::PingStats const& stats,
 
   ImGui::NextColumn();
 
-  ImGui::Text("Min: %d ms",
-              stats.min == std::numeric_limits<int>::max() ? 0 : stats.min);
+  ImGui::Text("Min: %d ms", stats.min == std::numeric_limits<int>::max() ? 0 : stats.min);
   ImGui::Text("Max: %d ms", stats.max);
   ImGui::Text("Avg: %d ms", stats.average);
 

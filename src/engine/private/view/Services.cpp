@@ -33,6 +33,8 @@ calcServiceCardHeight(std::size_t ipCount)
   height += line + spacing;
   height += 3.0f;
   height += line + spacing;
+  height += 5.0f;
+  height += line + spacing;
   height += 8.0f;
   height += ImGui::GetFrameHeight() + spacing;
   height += padding + frame;
@@ -194,15 +196,19 @@ mdns::engine::ui::renderServiceCard(
   ImGui::SetWindowFontScale(1.1f);
 
   float textWidth = ImGui::CalcTextSize(entry.name.c_str()).x;
-  auto const nameStripped =
-    mdns::engine::util::stripMdnsServicePostfix(entry.name);
-  ImVec2 textSize = ImGui::CalcTextSize(nameStripped.c_str());
 
   ImGui::Dummy(ImVec2(0.0f, 5.0f));
   ImGui::Indent(21);
 
-  ImGui::SetCursorPosX(ImGui::GetCursorPosX() +
-                       (ImGui::GetContentRegionAvail().x - textSize.x) * 0.5f);
+  std::string nameSliced = entry.name;
+  if (nameSliced.size() > 45){
+    nameSliced = nameSliced.substr(0, 45) + "...";
+  }
+
+  auto const nameStripped = util::stripMdnsServicePostfix(nameSliced);
+  ImVec2 textSize = ImGui::CalcTextSize(nameStripped.c_str());
+
+  ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (ImGui::GetContentRegionAvail().x - textSize.x) * 0.5f);
   ImGui::TextUnformatted(nameStripped.c_str());
 
   ImGui::SetWindowFontScale(1.0f);
@@ -211,9 +217,17 @@ mdns::engine::ui::renderServiceCard(
 
   ImGui::Text("Hostname:");
   ImGui::SameLine(250);
-  ImGui::Text("%s", entry.name.c_str());
+  ImGui::Text("%s", nameSliced.c_str());
 
   ImGui::Dummy(ImVec2(0.0f, 3.0f));
+
+  ImGui::Text("Type:");
+  ImGui::SameLine(250);
+  ImGui::Text("%s", util::stripMdnsServicePrefix(entry.name).c_str());
+
+  ImGui::Dummy(ImVec2(0.0f, 3.0f));
+
+
   ImGui::Text("IP Address(es):");
   ImGui::SameLine(250);
   ImGui::Indent(228);
@@ -350,7 +364,7 @@ mdns::engine::ui::renderServiceCard(
 
   ImGui::SameLine();
   {
-    std::string labelStr = fmt::format("  SSH root@{}", name);
+    std::string labelStr = "  SSH";
     ImVec2 textSize2 = ImGui::CalcTextSize(labelStr.c_str());
     float iconSize = ImGui::GetTextLineHeight();
     float pad = ImGui::GetStyle().FramePadding.x;
