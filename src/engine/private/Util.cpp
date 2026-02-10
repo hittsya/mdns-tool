@@ -36,7 +36,11 @@ mdns::engine::util::openShellAndSSH(const std::string& host,
     sshCmd += " -p " + std::to_string(port);
   }
 
-  std::string fullCmd = "wt.exe new-tab cmd /k \"" + sshCmd + "\"";
+  std::string fullCmd = "wt.exe new-tab cmd /k \""
+                        "echo Connecting to " +
+                        target + " on port " + std::to_string(port) + " && " +
+                        sshCmd + "\"";
+
   HINSTANCE res = ShellExecuteA(nullptr,
                                 "open",
                                 "cmd.exe",
@@ -65,7 +69,7 @@ mdns::engine::util::openShellAndSSH(const std::string& host,
     if (system(("command -v " + term + " > /dev/null 2>&1").c_str()) != 0)
       continue;
 
-    std::string wrapped = "bash -c 'echo \">>> " + sshCmd + "\";echo;" +
+    std::string wrapped = "bash -c 'echo \">" + sshCmd + "\";echo;" +
                           sshCmd +
                           "; echo; echo \"Press ENTER to close...\"; read'";
     std::string cmd;
