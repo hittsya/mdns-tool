@@ -1,7 +1,16 @@
-add_executable(
-    mdns_listener
-    main.cpp
-)
+if (WIN32)
+    set(APP_ICON ${CMAKE_CURRENT_SOURCE_DIR}/app.ico)
+
+    add_executable(mdns_listener WIN32
+        main.cpp
+        app.rc
+        ${APP_ICON}
+    )
+
+    target_link_options(mdns_listener PRIVATE "/SUBSYSTEM:WINDOWS" "/ENTRY:mainCRTStartup")
+else()
+    add_executable(mdns_listener main.cpp)
+endif()
 
 add_subdirectory(logger)
 add_subdirectory(settings)
