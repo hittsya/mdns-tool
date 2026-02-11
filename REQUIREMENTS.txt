@@ -1,7 +1,0 @@
-libx11-dev
-libxrandr-dev
-libxcinerama-dev
-libxcursor-dev
-libxi-dev
-libopengl-dev
-libgl1-mesa-dev
